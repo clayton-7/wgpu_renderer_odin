@@ -46,6 +46,11 @@ window_get_aspect :: proc() -> f32 {
     return win_size.x / win_size.y
 }
 
+window_get_viewport_aspect :: proc() -> f32 {
+    v := window_get_fixed_aspect_viewport()
+    return  v.w / v.h;
+}
+
 window_get_window_size :: proc() -> vec2 {
     return app_window_size
 }

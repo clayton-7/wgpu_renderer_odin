@@ -10,6 +10,10 @@ WIN_TITLE :: "Force"
 
 TARGET_FPS :: 60.0
 fps_lock: bool = true
+// WIN_SIZE :: vec2{ 1024, 1024 }
+WIN_SIZE :: vec2{ 1920, 1080 }
+// WIN_SIZE :: vec2{ 2560, 1440 }
+// WIN_SIZE :: vec2{ 3840, 2160 }
 
 @(private="file") ctx: runtime.Context
 
@@ -17,7 +21,7 @@ app_init :: proc() {
     ctx = context
     types_init()
     go_init()
-    window_init(vec2{ 1920, 1080 }, WIN_TITLE)
+    window_init(WIN_SIZE, WIN_TITLE)
     device_init()
 
     gui_init()
@@ -46,6 +50,8 @@ app_update :: proc() {
     glfw.SetKeyCallback(window, app_input)
     glfw.SetScrollCallback(window, app_scroll)
     glfw.SetWindowSizeCallback(window, app_resize)
+    glfw.SetMouseButtonCallback(window, app_mouse_btn)
+    glfw.SetCursorPosCallback(window, app_cursor)
 
     camera := new_empty(vec3_back * 9)
     game_init(camera)
@@ -141,7 +147,7 @@ app_resize:: proc "c"(window: glfw.WindowHandle, width: i32, height: i32) {
     // TODO: FIND THE MAX RESOLUTION SUPPORTED FOR THE CURRENT DEVICE
     if (w >= 8192 || h >= 8192) {
         WARNF("Max supported resolution reached: %vx%v\n", w, h)
-        window_set_size(vec2{ 8192, 8192 })
+        window_set_size(vec2{ min(8192, w), min(8192, h) })
         return
     }
 
@@ -151,8 +157,19 @@ app_resize:: proc "c"(window: glfw.WindowHandle, width: i32, height: i32) {
     game_resize(win_size)
 }
 
+app_cursor :: proc "c" (_: glfw.WindowHandle, xpos,  ypos: f64) {
+    context = ctx
+    gui_cursor_event(vec2{ f32(xpos), f32(ypos) })
+}
+
+app_mouse_btn :: proc "c" (_: glfw.WindowHandle, button, action, mods: i32) {
+    context = ctx
+    gui_mouse(MouseButton(button), State(action), Mod(mods))
+}
+
 app_input :: proc "c"(_: glfw.WindowHandle, key, scancode, action, mods: i32) {
     context = ctx
+    gui_input(Key(key), scancode, State(action), Mod(mods))
     game_input(Key(key), scancode, State(action), Mod(mods))
 }
 

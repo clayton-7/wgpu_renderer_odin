@@ -315,20 +315,30 @@ update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> str
     obj := get_game_obj(id, loc)
     if obj == nil { return { mat4_identity, mat4_identity } }
 
-    c3: f32 = math.cos(obj.rotation.z * math.RAD_PER_DEG)
-    s3: f32 = math.sin(obj.rotation.z * math.RAD_PER_DEG)
-    c2: f32 = math.cos(obj.rotation.x * math.RAD_PER_DEG)
-    s2: f32 = math.sin(obj.rotation.x * math.RAD_PER_DEG)
-    c1: f32 = math.cos(obj.rotation.y * math.RAD_PER_DEG)
-    s1: f32 = math.sin(obj.rotation.y * math.RAD_PER_DEG)
-
-    pos := obj.position
+    pos   := obj.position
+    rot   := obj.rotation * math.RAD_PER_DEG
     scale := obj.scale
 
     if is_2d {
-        win_size := window_get_window_size()
-        pos *= (2.0 / vec3{ win_size.x, win_size.y, 1 })
+        app_size := window_get_window_size()
+        aspect := window_get_viewport_aspect()
+
+        pos = pos / vec3{app_size.x, app_size.y, 1}
+        pos.x *= aspect
+
+        scale_tmp := scale.z
+        scale /= app_size.x / aspect
+        scale *= scale_tmp
+
+        rot.z = -rot.z
     }
+
+    c3: f32 = math.cos(rot.z)
+    s3: f32 = math.sin(rot.z)
+    c2: f32 = math.cos(rot.x)
+    s2: f32 = math.sin(rot.x)
+    c1: f32 = math.cos(rot.y)
+    s1: f32 = math.sin(rot.y)
 
     model_matrix: mat4 = {
         scale.x * (c1 * c3 + s1 * s2 * s3), scale.x * (c2 * s3), scale.x * (c1 * s2 * s3 - c3 * s1), 0.0,
@@ -366,6 +376,10 @@ get_object_up_dir :: proc(obj_id: id_t) -> vec3 {
     mats := update_matrix(obj_id)
     return vec3{ mats.model[4], mats.model[5], mats.model[6] }
     // return vec3{ mats.model[1, 0], mats.model[1, 1], mats.model[1, 2] }
+}
+
+set_scale :: proc(obj_id: id_t, scale: vec3) {
+    get_game_obj(obj_id).scale *= scale
 }
 
 load_gltf :: proc(id: id_t, loc := #caller_location) {

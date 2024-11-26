@@ -20,17 +20,17 @@ gui_init :: proc() {
     device_get_default_pipeline(&pipeline)
     pipeline.pipeline_descriptor.label = "gui pipeline"
 
-    vertex_attributes := [1]wgpu.VertexAttribute{}
+    vertex_attributes := [2]wgpu.VertexAttribute{}
     vertex_attributes[0].shaderLocation = 0
     vertex_attributes[0].format = .Float32x3
     vertex_attributes[0].offset = 0
 
-    // vertex_attributes[1].shaderLocation = 1
-    // vertex_attributes[1].format = .Float32x3
-    // vertex_attributes[1].offset = size_of(vec3)
+    vertex_attributes[1].shaderLocation = 1
+    vertex_attributes[1].format = .Float32x3
+    vertex_attributes[1].offset = size_of(vec3)
 
     vertex_buffer_layout := wgpu.VertexBufferLayout{
-        arrayStride = 1 * size_of(vec3),
+        arrayStride = 2 * size_of(vec3),
         stepMode = .Vertex,
         attributeCount = len(vertex_attributes),
         attributes = &vertex_attributes[0],
@@ -45,20 +45,20 @@ gui_init :: proc() {
     global_bind_group_layout_entry[0].buffer.type = .Uniform
     global_bind_group_layout_entry[0].buffer.minBindingSize = size_of(GlobalUbo)
 
-    gui_bind_group_layout_entry: [1]wgpu.BindGroupLayoutEntry
+    gui_bind_group_layout_entry: [3]wgpu.BindGroupLayoutEntry
     gui_bind_group_layout_entry[0].binding = 0
     gui_bind_group_layout_entry[0].visibility = { .Vertex, .Fragment }
     gui_bind_group_layout_entry[0].buffer.type = .Uniform
     gui_bind_group_layout_entry[0].buffer.minBindingSize = size_of(GuiUbo)
 
-    // gui_bind_group_layout_entry[1].binding = 1
-    // gui_bind_group_layout_entry[1].visibility = { .Fragment }
-    // gui_bind_group_layout_entry[1].texture.sampleType = .Float
-    // gui_bind_group_layout_entry[1].texture.viewDimension = ._2D
-    //
-    // gui_bind_group_layout_entry[2].binding = 2
-    // gui_bind_group_layout_entry[2].visibility = { .Fragment }
-    // gui_bind_group_layout_entry[2].sampler.type = .Filtering
+    gui_bind_group_layout_entry[1].binding = 1
+    gui_bind_group_layout_entry[1].visibility = { .Fragment }
+    gui_bind_group_layout_entry[1].texture.sampleType = .Float
+    gui_bind_group_layout_entry[1].texture.viewDimension = ._2D
+
+    gui_bind_group_layout_entry[2].binding = 2
+    gui_bind_group_layout_entry[2].visibility = { .Fragment }
+    gui_bind_group_layout_entry[2].sampler.type = .Filtering
 
     bind_group_layout_descriptor: [2]wgpu.BindGroupLayoutDescriptor
     bind_group_layout_descriptor[0].label = "gui global bind group layout"
@@ -115,7 +115,7 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
     wgpu.RenderPassEncoderSetPipeline(render_pass, pipeline.pipeline_handle)
     wgpu.RenderPassEncoderSetBindGroup(render_pass, 0, pipeline.bind_group)
 
-    aspect: f32 = window_get_aspect()
+    aspect := window_get_viewport_aspect()
     ortho_proj := get_orthographic_projection(-aspect, aspect, -1, 1, -1, 1)
 
     // ubo := global_ubo
@@ -155,7 +155,92 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
     }
 }
 
-gui_create_quad :: proc(event_callback: ^proc(event: GuiEvent) = nil, color := vec4_one) -> ^GameObject {
+gui_cursor_event :: proc(pos: vec2) {
+    guis := get_guis()
+
+    for &g, i in guis {
+        if g.event_callback == nil do continue
+
+        id := get_obj_id_from_comp_id(i, Components.GUI)
+        obj := get_game_obj(id)
+
+        e := g.last_event
+        last_event_hover := e.hovering
+
+        e.released = false
+        e.hovering = false
+        on_hover := is_mouse_on_gui(obj)
+
+        if last_event_hover && !on_hover {
+            e.hovering = false
+            g.last_event = e
+            g.event_callback(e)
+            return
+        }
+
+        if !last_event_hover && on_hover {
+            e.hovering = true
+            g.last_event = e
+            g.event_callback(e)
+            return
+        }
+    }
+}
+
+gui_mouse :: proc(btn: MouseButton, state: State, mod: Mod) {
+    guis := get_guis()
+
+    for &g, i in guis {
+        if g.event_callback == nil do continue
+
+        id := get_obj_id_from_comp_id(i, Components.GUI)
+        obj := get_game_obj(id)
+
+        e := g.last_event
+
+        if is_mouse_on_gui(obj) {
+            if btn == .LEFT && state == .PRESS {
+                e.holding = true
+                e.pressed = true
+                e.focused = true
+                e.released = false
+                e.toggle = !e.toggle
+            }
+
+        } else {
+            if btn == .LEFT && state == .PRESS do e.focused = false
+        }
+
+        if btn == .LEFT && state == .RELEASE {
+            e.released = true
+            e.pressed = false
+            e.holding = false
+        }
+
+        g.last_event = e
+        g.event_callback(e)
+    }
+}
+
+gui_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
+    guis := get_guis()
+
+    for &g, i in guis {
+        if g.event_callback == nil do continue
+
+        id := get_obj_id_from_comp_id(i, Components.GUI)
+        obj := get_game_obj(id)
+
+        e := g.last_event
+
+        if e.focused {
+            e.key = key
+            g.event_callback(e)
+        }
+    }
+}
+
+gui_create_quad :: proc(texture_filepath: string = "", event_callback: proc(event: GuiEvent) = nil, color := vec4_one) -> ^GameObject {
     obj := new_empty()
     id := obj.id
 
@@ -174,14 +259,14 @@ gui_create_quad :: proc(event_callback: ^proc(event: GuiEvent) = nil, color := v
     }
     wgpu.QueueWriteBuffer(device.queue, gui.ubo, 0, &ui_ubo, size_of(GuiUbo))
 
-    if event_callback != nil do gui.event_callback = event_callback^
+    if event_callback != nil do gui.event_callback = event_callback
 
     vertex_data := [?]f32{
-        // pos        uv
-       -1,  1, 0,    // 0,1,0,
-        1,  1, 0,    // 1,1,0,
-       -1, -1, 0,    // 0,0,0,
-        1, -1, 0,    // 1,0,0,
+        // pos         uv
+       -1,  1, 0,    0, 1, 0,
+        1,  1, 0,    1, 1, 0,
+       -1, -1, 0,    0, 0, 0,
+        1, -1, 0,    1, 0, 0,
     }
 
     index_data  := [?]u32{ 1, 2, 0, 1, 3, 2 }
@@ -200,20 +285,23 @@ gui_create_quad :: proc(event_callback: ^proc(event: GuiEvent) = nil, color := v
     gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
     wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &index_data, uint(gui.index_buffer_size))
 
-    entries: [1]wgpu.BindGroupEntry
+    filepath := texture_filepath
+    if len(filepath) == 0 do filepath = "assets/models/1x1.png"
+
+    texture := load_texture_image(id, filepath)
+
+    entries: [3]wgpu.BindGroupEntry
     entries[0].binding = 0
     entries[0].buffer = gui.ubo
     entries[0].size = size_of(GuiUbo)
 
-    // // TEXTURE
-    // binding[1] = c.zero_c_struct(c.WGPUBindGroupEntry);
-    // binding[1].textureView = texture.texture_view;
-    // binding[1].binding = 1;
-    //
-    // // SAMPLER
-    // binding[2] = c.zero_c_struct(c.WGPUBindGroupEntry);
-    // binding[2].sampler = texture.sampler;
-    // binding[2].binding = 2;
+    // TEXTURE
+    entries[1].textureView = texture.texture_view;
+    entries[1].binding = 1;
+
+    // SAMPLER
+    entries[2].sampler = texture.sampler;
+    entries[2].binding = 2;
 
     bind_group_descriptor := wgpu.BindGroupDescriptor{
         label = concat_cstring({ "gui quad: (", to_string(id), ") bind group" }),
@@ -225,4 +313,73 @@ gui_create_quad :: proc(event_callback: ^proc(event: GuiEvent) = nil, color := v
     gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
 
     return obj
+}
+
+is_point_in_polygon :: proc(point: vec2, polygon: []vec2) -> bool {
+    inside := false
+    vert_count := len(polygon)
+
+    for i := 0; i < vert_count; i += 1 {
+        j := (i - 1 + vert_count) % vert_count
+
+        a := (polygon[i].y > point.y) != (polygon[j].y > point.y)
+
+        if polygon[j].y != polygon[i].y {
+            b := point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x
+
+            if a && b do inside = !inside
+
+        } else {
+            if point.y == polygon[i].y && (point.x >= min(polygon[i].x, polygon[j].x)) && (point.x <= max(polygon[i].x, polygon[j].x)) do return true
+        }
+    }
+
+    return inside
+}
+
+is_mouse_on_gui :: proc(obj: ^GameObject) -> bool {
+    view := window_get_fixed_aspect_viewport()
+    app_size := window_get_window_size()
+
+    cursor := (((window_get_cursor_position_f32() / vec2{ view.w, view.h }) - 0.5) * 2) * app_size
+
+    // setting cursor position to be the same independent screen size
+    if view.x > 0 {
+        cursor.x = ((((window_get_cursor_position_f32().x - view.x) / view.w -0.5) * 2) * app_size.x)
+        cursor.y = -cursor.y
+    } else {
+        cursor.y = -((((window_get_cursor_position_f32().y - view.y) / view.h -0.5) * 2) * app_size.y)
+    }
+
+    corners: []vec2
+    corners = make([]vec2, 4, allocator = context.temp_allocator)
+
+    pos := vec2{ obj.position.x , obj.position.y }
+
+    size := obj.scale * obj.scale.z
+    rot := -obj.rotation.z
+
+    // points
+    corners[0] = vec2{ -size.x,  size.y } // tl
+    corners[1] = vec2{  size.x,  size.y } // tr
+    corners[2] = vec2{  size.x, -size.y } // br
+    corners[3] = vec2{ -size.x, -size.y } // bl
+
+    // rotate
+    for i := 0; i < len(corners); i += 1 {
+        x := corners[i].x
+        y := corners[i].y
+        angle := rot * math.RAD_PER_DEG
+
+        corners[i].x = x * math.cos(angle) - y * math.sin(angle)
+        corners[i].y = x * math.sin(angle) + y * math.cos(angle)
+    }
+
+    // position
+    corners[0] += pos
+    corners[1] += pos
+    corners[2] += pos
+    corners[3] += pos
+
+    return is_point_in_polygon(cursor, corners)
 }

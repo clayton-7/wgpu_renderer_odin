@@ -21,6 +21,19 @@ vec2f64 :: distinct [2]f64
 vec3f64 :: distinct [3]f64
 vec4f64 :: distinct [4]f64
 
+@(private="file") _vec_2 :: proc(x: f32 = 0, y: f32 = 0) -> vec2 { return vec2{ x, y } }
+
+@(private="file") _vec_3a :: proc(x: f32 = 0, y: f32 = 0, z: f32 = 0) -> vec3 { return vec3{ x, y, z } }
+@(private="file") _vec_3b :: proc(v: vec2) -> vec3 { return vec3{ v.x, v.y, 0 } }
+
+@(private="file") _vec_4a :: proc(x: f32 = 0, y: f32 = 0, z: f32 = 0, w: f32 = 0) -> vec4 { return vec4{ x, y, z, w } }
+@(private="file") _vec_4b :: proc(v: vec2, v1: vec2) -> vec4 { return vec4{ v.x, v.y, v1.x, v1.y } }
+@(private="file") _vec_4c :: proc(v: vec2) -> vec4 { return vec4{ v.x, v.y, 0, 0 } }
+@(private="file") _vec_4d :: proc(v: vec3) -> vec4 { return vec4{ v.x, v.y, v.z, 0 } }
+
+vec_3 :: proc{ _vec_3a, _vec_3b }
+vec_4 :: proc{ _vec_4a, _vec_4b, _vec_4c, _vec_4d }
+
 // mat2 :: distinct matrix [2, 2]f32
 // mat3 :: distinct matrix [3, 3]f32
 // mat4 :: distinct matrix [4, 4]f32
@@ -250,7 +263,7 @@ GuiEvent :: struct {
     hovering: bool,
     toggle:   bool,
     focused:  bool,
-    key:      string,
+    key:      Key,
 }
 
 Gui :: struct {
@@ -529,6 +542,7 @@ HAT_LEFT_DOWN  :: (HAT_LEFT  | HAT_DOWN)
 /** Printable keys **/
 Key :: enum {
     UNKNOWN = -1,
+    NONE = 0,
     SPACE         = 32,
     APOSTROPHE    = 39,  /* ' */
     COMMA         = 44,  /* , */
@@ -668,6 +682,17 @@ Mod :: enum {
     SUPER     = 0x0008,
     CAPS_LOCK = 0x0010,
     NUM_LOCK  = 0x0020,
+}
+
+MouseButton :: enum {
+    LEFT   = 0,
+    RIGHT  = 1,
+    MIDDLE = 2,
+    BTN_4  = 3,
+    BTN_5  = 4,
+    BTN_6  = 5,
+    BTN_7  = 6,
+    BTN_8  = 7,
 }
 
 MOUSE_BUTTON_1 :: 0
