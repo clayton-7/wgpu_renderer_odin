@@ -6,7 +6,7 @@ import "core:math"
 
 @(private="file") pipeline: Pipeline
 @(private="file") gui_bind_group_layouts: [2]wgpu.BindGroupLayout
-gui_global_buffer: wgpu.Buffer
+@(private="file") gui_global_buffer: wgpu.Buffer
 
 // @(private="file")
 // GuiGlobalUbo :: struct {
@@ -165,6 +165,7 @@ gui_cursor_event :: proc(pos: vec2) {
         obj := get_game_obj(id)
 
         e := g.last_event
+        e.id = id
         last_event_hover := e.hovering
 
         e.released = false
@@ -197,6 +198,7 @@ gui_mouse :: proc(btn: MouseButton, state: State, mod: Mod) {
         obj := get_game_obj(id)
 
         e := g.last_event
+        e.id = id
 
         if is_mouse_on_gui(obj) {
             if btn == .LEFT && state == .PRESS {
@@ -232,12 +234,37 @@ gui_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
         obj := get_game_obj(id)
 
         e := g.last_event
+        e.id = id
 
         if e.focused {
             e.key = key
             g.event_callback(e)
         }
     }
+}
+
+gui_create_bind_group :: proc(id: id_t, gui: ^Gui, texture: ^Texture) {
+    entries: [3]wgpu.BindGroupEntry
+    entries[0].binding = 0
+    entries[0].buffer = gui.ubo
+    entries[0].size = size_of(GuiUbo)
+
+    // TEXTURE
+    entries[1].textureView = texture.texture_view;
+    entries[1].binding = 1
+
+    // SAMPLER
+    entries[2].sampler = texture.sampler
+    entries[2].binding = 2
+
+    bind_group_descriptor := wgpu.BindGroupDescriptor{
+        label = concat_cstring({ "gui quad: (", to_string(id), ") bind group" }),
+        entryCount = len(entries),
+        entries = &entries[0],
+        layout = gui_bind_group_layouts[1],
+    }
+
+    gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
 }
 
 gui_create_quad :: proc(texture_filepath: string = "", event_callback: proc(event: GuiEvent) = nil, color := vec4_one) -> ^GameObject {
@@ -289,28 +316,10 @@ gui_create_quad :: proc(texture_filepath: string = "", event_callback: proc(even
     if len(filepath) == 0 do filepath = "assets/models/1x1.png"
 
     texture := load_texture_image(id, filepath)
+    obj.scale.x = f32(texture.width)
+    obj.scale.y = f32(texture.height)
 
-    entries: [3]wgpu.BindGroupEntry
-    entries[0].binding = 0
-    entries[0].buffer = gui.ubo
-    entries[0].size = size_of(GuiUbo)
-
-    // TEXTURE
-    entries[1].textureView = texture.texture_view;
-    entries[1].binding = 1;
-
-    // SAMPLER
-    entries[2].sampler = texture.sampler;
-    entries[2].binding = 2;
-
-    bind_group_descriptor := wgpu.BindGroupDescriptor{
-        label = concat_cstring({ "gui quad: (", to_string(id), ") bind group" }),
-        entryCount = len(entries),
-        entries = &entries[0],
-        layout = gui_bind_group_layouts[1],
-    }
-
-    gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
+    gui_create_bind_group(id, gui, texture)
 
     return obj
 }
@@ -338,6 +347,8 @@ is_point_in_polygon :: proc(point: vec2, polygon: []vec2) -> bool {
 }
 
 is_mouse_on_gui :: proc(obj: ^GameObject) -> bool {
+    if !is_cursor_enabled() do return false
+
     view := window_get_fixed_aspect_viewport()
     app_size := window_get_window_size()
 

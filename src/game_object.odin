@@ -35,7 +35,10 @@ GLTF_TYPE :: enum(u32) {
     MAT3x4 = 5139,
 }
 
+@(private="file") async_textures: [dynamic]ATexture
+
 go_init :: proc() {
+    async_textures.allocator = context.temp_allocator
 }
 
 go_destroy :: proc() {
@@ -97,6 +100,15 @@ destroy_textures :: proc() {
         wgpu.TextureRelease(t.texture)
         wgpu.SamplerRelease(t.sampler)
     }
+}
+
+destroy_texture :: proc(id: id_t, loc:=#caller_location) {
+    t := get_texture(id, loc=loc)
+
+    wgpu.TextureViewRelease(t.texture_view)
+    wgpu.TextureDestroy(t.texture)
+    wgpu.TextureRelease(t.texture)
+    wgpu.SamplerRelease(t.sampler)
 }
 //
 // pub fn destroy_obj(id: t.id_t) void {
@@ -168,6 +180,12 @@ new_object :: proc(model_filepath: string, material: Material = Material{}, loc 
     diffuse_tex := load_texture_image(id, mat.diffuse_filepath)
     normal_tex := load_texture_image(id, mat.normal_filepath)
 
+    go_create_bind_group(id, obj, model, diffuse_tex, normal_tex)
+
+    return obj
+}
+
+go_create_bind_group :: proc(id: id_t, gui: ^GameObject, model: ^Model, diffuse_tex: ^Texture, normal_tex: ^Texture) {
     entries: [4]wgpu.BindGroupEntry
     entries[0].binding = 0
     entries[0].buffer = model.ubo
@@ -187,8 +205,6 @@ new_object :: proc(model_filepath: string, material: Material = Material{}, loc 
     }
 
     model.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
-
-    return obj
 }
 
 new_light_obj :: proc(light_type: LightType, color: vec4, loc := #caller_location) -> ^GameObject {
@@ -769,4 +785,90 @@ create_cube_texture_image :: proc(id: id_t, filepaths: [6]string, loc := #caller
     sampler_descriptor.compare = .Undefined
     sampler_descriptor.maxAnisotropy = 1
     texture.sampler = wgpu.DeviceCreateSampler(device.device, &sampler_descriptor)
+}
+
+_set_texture :: proc(t : ATexture) {
+    filepath := t.filepath
+    loc := t.loc
+    id := t.id
+
+    if len(filepath) <= 0 {
+        ERRORF("texture id(%v), empty filepath\n", id, loc = loc)
+        return
+    }
+
+    texture: ^Texture
+
+    if is_valid_component(id, Components.TEXTURE) {
+        texture = get_texture(id, loc=loc)
+
+        if is_valid_component(id, Components.GUI) {
+            gui := get_gui(id, loc=loc)
+
+            wgpu.BindGroupRelease(gui.bind_group)
+            gui.bind_group = nil
+
+        } else {
+            model := get_model(id, loc=loc)
+
+            wgpu.BindGroupRelease(model.bind_group)
+            model.bind_group = nil
+        }
+
+        destroy_texture(id, loc=loc)
+
+    } else {
+        texture = new_texture(id, loc=loc)
+    }
+
+    texture.filepath = filepath
+    temp_filepath, err := strings.clone_to_cstring(texture.filepath, context.temp_allocator)
+
+    if err != .None {
+        ERRORF("Failed to convert filepath string: %s, error: %v\n", texture.filepath, err, loc = loc)
+        return
+    }
+
+    width, height, channel: i32
+    data := image.load(temp_filepath, &width, &height, &channel, 4)
+
+    if data == nil {
+        ERRORF("Failed to load texture image: %s\n", texture.filepath, loc = loc)
+        return
+    }
+
+    texture.width = u32(width)
+    texture.height = u32(height)
+    texture.usage = { .TextureBinding, .CopyDst }
+
+    create_texture(id, .RGBA8Unorm, data)
+    image.image_free(data)
+
+    if is_valid_component(id, Components.GUI) {
+        gui := get_gui(id, loc=loc)
+        gui_create_bind_group(id, gui, texture)
+
+    } else {
+
+        model := get_model(id, loc=loc)
+        go := get_game_obj(id, loc=loc)
+
+        // HACK: fix this
+        go_create_bind_group(id, go, model, texture, texture)
+    }
+}
+
+async_set_textures :: proc() {
+    if wgpu.DevicePoll(device.device, true) do return
+
+    for t in async_textures {
+        _set_texture(t)
+        pop(&async_textures)
+    }
+}
+
+
+// TODO: set more than one texture, eg: diff, normal, spec...
+set_texture :: proc(id: id_t, filepath: string, loc:=#caller_location) {
+    append(&async_textures, ATexture{ id = id, filepath = filepath, loc = loc })
 }

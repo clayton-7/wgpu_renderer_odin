@@ -121,6 +121,9 @@ app_update :: proc() {
 
         wgpu.SurfacePresent(device.surface)
 
+        async_set_textures()
+        free_all(context.temp_allocator)
+
         if fps_lock {
             target_fps_f64 := f64(TARGET_FPS)
             free_time : f64 = 1.0 / target_fps_f64 - (glfw.GetTime() - begin_time)
@@ -130,8 +133,6 @@ app_update :: proc() {
                 time.sleep(sleep_time)
             }
         }
-
-        free_all(context.temp_allocator)
     }
 
     game_destroy()

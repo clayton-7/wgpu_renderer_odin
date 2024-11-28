@@ -3,6 +3,7 @@ package main
 import "vendor:wgpu"
 import "vendor:glfw"
 import "core:mem"
+import "base:runtime"
 
 // GLOBALS ===================================================
 window : glfw.WindowHandle = nil
@@ -170,6 +171,12 @@ GuiUbo :: struct {
     color:      vec4,
     is_font:    u32,
     pad:        vec3
+}
+
+ATexture :: struct {
+    id: id_t,
+    filepath: string,
+    loc: runtime.Source_Code_Location,
 }
 
 Pipeline :: struct {
@@ -520,6 +527,9 @@ get_light :: proc(id: id_t, loc := #caller_location) -> ^Light {
     return &lights[idx]
 }
 
+is_valid_component :: proc(id: id_t, comp: Components) -> bool {
+    return comp_id_from_obj_id[comp][id] != INVALID_ID
+}
 
 /* Button/Key states */
 State :: enum {
