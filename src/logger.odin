@@ -49,20 +49,29 @@ logger_destroy :: proc() {
     }
 }
 
-read_file_to_cstring :: proc(file_path: string, allocator := context.allocator, loc := #caller_location) -> cstring {
-    u8_buffer, ok := os.read_entire_file_from_filename(file_path, allocator, loc)
+@(private="file") _read_file :: proc(file_path: string, allocator: runtime.Allocator, loc := #caller_location) -> [^]u8 {
+    u8_buffer, ok := os.read_entire_file_from_filename(file_path, context.temp_allocator, loc)
 
     if !ok {
         ERRORF("Failed to read the file:", file_path, loc=loc)
-        return ""
+        return &u8_buffer[0]
     }
 
     c_buffer := make([]byte, len(u8_buffer) + 1, allocator, loc)
     copy(c_buffer, u8_buffer)
     c_buffer[len(u8_buffer)] = 0
 
-    delete(u8_buffer)
-    return cstring(&c_buffer[0])
+    return &c_buffer[0]
+}
+
+read_file_to_cstring :: proc(file_path: string, allocator := context.allocator, loc := #caller_location) -> cstring {
+    buffer := _read_file(file_path, allocator, loc=loc)
+    return cstring(&buffer[0])
+}
+
+read_file_to_u8 :: proc(file_path: string, allocator := context.allocator, loc := #caller_location) -> [^]u8 {
+    buffer := _read_file(file_path, allocator, loc=loc)
+    return &buffer[0]
 }
 
 concat_cstring :: proc(values: []string, allocator := context.temp_allocator) -> cstring {

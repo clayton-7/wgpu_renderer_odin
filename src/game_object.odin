@@ -5,7 +5,6 @@ import "core:encoding/json"
 import "core:strings"
 import "core:mem"
 import "core:math"
-import "core:math/rand"
 import "core:thread"
 import "core:sync"
 
@@ -44,9 +43,10 @@ go_init :: proc() {
 go_destroy :: proc() {
     destroy_model()
     destroy_textures()
+    //destroy_texts()
+    destroy_fonts()
 //     destroy_gui()
 //     destroy_light()
-//     destroy_texts()
 }
 
 load_model :: proc() {
@@ -102,6 +102,17 @@ destroy_textures :: proc() {
     }
 }
 
+destroy_fonts :: proc() {
+    fonts := get_fonts()
+
+    for f in fonts {
+        if f.data == nil do continue
+
+        free(f.data)
+        delete(f.glyphs)
+    }
+}
+
 destroy_texture :: proc(id: id_t, loc:=#caller_location) {
     t := get_texture(id, loc=loc)
 
@@ -110,6 +121,7 @@ destroy_texture :: proc(id: id_t, loc:=#caller_location) {
     wgpu.TextureRelease(t.texture)
     wgpu.SamplerRelease(t.sampler)
 }
+
 //
 // pub fn destroy_obj(id: t.id_t) void {
 //     destroy_model(id)
@@ -170,12 +182,12 @@ new_object :: proc(model_filepath: string, material: Material = Material{}, loc 
     label = concat_cstring({ "game object id: (", to_string(id), ") vertex buffer" })
 
     model.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, model.vertex_buffer_size, label=label)
-    device_write_buffer(model.vertex_buffer, &model.vertices[0], model.vertex_buffer_size)
+    wgpu.QueueWriteBuffer(device.queue, model.vertex_buffer, 0, &model.vertices[0], uint(model.vertex_buffer_size))
 
     label = concat_cstring({ "game object id: (", to_string(id), ") index buffer" })
 
     model.index_buffer = device_create_buffer({ .CopyDst, .Index }, model.index_buffer_size, label=label)
-    device_write_buffer(model.index_buffer, &model.indices[0], model.index_buffer_size)
+    wgpu.QueueWriteBuffer(device.queue, model.index_buffer, 0, &model.indices[0], uint(model.index_buffer_size))
 
     diffuse_tex := load_texture_image(id, mat.diffuse_filepath)
     normal_tex := load_texture_image(id, mat.normal_filepath)
@@ -439,8 +451,6 @@ load_gltf :: proc(id: id_t, loc := #caller_location) {
         }
     }
 
-    gltf_buffers := json_data["buffers"].(json.Array)
-
     binary_filepath := strings.trim_suffix(filepath, ".gltf")
     binary_filepath = strings.trim_suffix(binary_filepath, ".glb")
 
@@ -701,23 +711,24 @@ create_cube_texture_image :: proc(id: id_t, filepaths: [6]string, loc := #caller
     sync.wait_group_add(&wg, IMG_COUNT)
 
     work_data: [IMG_COUNT]WorkerData
+    threads: [IMG_COUNT]^thread.Thread
 
     for i in 0 ..< IMG_COUNT {
-        t := thread.create(worker, .High)
+        threads[i] = thread.create(worker, .High)
 
-        if t == nil {
-            ERRORF("Cannot create a thread to load the image: %v, error on thread %v\n", t.user_index)
+        if threads[i] == nil {
+            ERRORF("Cannot create a thread to load the image: %v, error on thread %v\n", threads[i].user_index)
             return
         }
 
         work_data[i].waitgroupdata = &wg
         work_data[i].filepath = filepaths[i]
 
-        t.user_index = i
-        t.data = &work_data[i]
-        t.flags = { .Self_Cleanup }
+        threads[i].user_index = i
+        threads[i].data = &work_data[i]
+        threads[i].flags = { .Self_Cleanup }
 
-        thread.start(t)
+        thread.start(threads[i])
     }
 
     sync.wait_group_wait(&wg)
@@ -725,7 +736,8 @@ create_cube_texture_image :: proc(id: id_t, filepaths: [6]string, loc := #caller
         if wd.error do return
     }
 
-    width, height, channel := work_data[0].width, work_data[0].height, work_data[0].channel
+
+    width, height, _ := work_data[0].width, work_data[0].height, work_data[0].channel
 
     texture.width = u32(width)
     texture.height = u32(height)
@@ -845,8 +857,7 @@ _set_texture :: proc(t : ATexture) {
     image.image_free(data)
 
     if is_valid_component(id, Components.GUI) {
-        gui := get_gui(id, loc=loc)
-        gui_create_bind_group(id, gui, texture)
+        gui_create_bind_group(id)
 
     } else {
 

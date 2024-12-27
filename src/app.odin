@@ -3,19 +3,15 @@ package main
 import "vendor:glfw"
 import "vendor:wgpu"
 import "core:time"
-import "base:runtime"
-import "core:math"
 
 WIN_TITLE :: "Force"
 
 TARGET_FPS :: 60.0
 fps_lock: bool = true
-// WIN_SIZE :: vec2{ 1024, 1024 }
+ //WIN_SIZE :: vec2{ 1024, 1024 }
 WIN_SIZE :: vec2{ 1920, 1080 }
 // WIN_SIZE :: vec2{ 2560, 1440 }
-// WIN_SIZE :: vec2{ 3840, 2160 }
-
-@(private="file") ctx: runtime.Context
+ //WIN_SIZE :: vec2{ 3840, 2160 }
 
 app_init :: proc() {
     ctx = context
@@ -37,8 +33,8 @@ app_destroy :: proc() {
     gui_destroy()
     device_destroy()
     window_destroy()
-    types_destroy()
     go_destroy()
+    types_destroy()
 }
 
 app_update :: proc() {
@@ -65,7 +61,6 @@ app_update :: proc() {
         last_frame = current_frame
 
         render_update_lights(&global_ubo, { 0.4, 0.4, 0.4 })
-
         game_update(delta_time)
 
         aspect: f32 = window_get_fixed_aspect()
@@ -82,6 +77,7 @@ app_update :: proc() {
 
         // TEXTURE VIEW
         surface_texture := wgpu.SurfaceGetCurrentTexture(device.surface)
+        defer wgpu.TextureRelease(surface_texture.texture)
 
         if surface_texture.status != .Success {
             INFOF("Cannot acquire the current render texture, status: %v\n", enum_to_string(surface_texture.status))
@@ -111,6 +107,7 @@ app_update :: proc() {
         wgpu.RenderPassEncoderRelease(render_pass)
         wgpu.TextureViewRelease(current_texture_view)
         // ===================================
+
         command_buffer_descriptor := wgpu.CommandBufferDescriptor{ nextInChain = nil, label = "Draw command buffer" }
         command := wgpu.CommandEncoderFinish(encoder, &command_buffer_descriptor)
 

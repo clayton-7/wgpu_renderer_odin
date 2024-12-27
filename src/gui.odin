@@ -1,8 +1,9 @@
 package main
 
 import "vendor:wgpu"
-import "core:strings"
+import tt "vendor:stb/truetype"
 import "core:math"
+import "core:fmt"
 
 @(private="file") pipeline: Pipeline
 @(private="file") gui_bind_group_layouts: [2]wgpu.BindGroupLayout
@@ -118,7 +119,6 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
     aspect := window_get_viewport_aspect()
     ortho_proj := get_orthographic_projection(-aspect, aspect, -1, 1, -1, 1)
 
-    // ubo := global_ubo
     ubo := GlobalUbo{}
     ubo.projection = ortho_proj
     ubo.view = mat4_identity
@@ -138,7 +138,12 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
         model_matrix := update_matrix(id, is_2d = true).model
 
         is_font : u32 = 0
-        if g.gui_type == .TEXT do is_font = 1
+        if g.gui_type == .TEXT {
+            is_font = 1
+
+            // do not render empty text
+            if len(get_text_component(id).text) == 0 do continue
+        }
 
         ui_ubo := GuiUbo{
             model = model_matrix,
@@ -231,7 +236,6 @@ gui_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
         if g.event_callback == nil do continue
 
         id := get_obj_id_from_comp_id(i, Components.GUI)
-        obj := get_game_obj(id)
 
         e := g.last_event
         e.id = id
@@ -243,7 +247,10 @@ gui_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
     }
 }
 
-gui_create_bind_group :: proc(id: id_t, gui: ^Gui, texture: ^Texture) {
+gui_create_bind_group :: proc(id: id_t) {
+    gui := get_gui(id)
+    texture := get_texture(id)
+
     entries: [3]wgpu.BindGroupEntry
     entries[0].binding = 0
     entries[0].buffer = gui.ubo
@@ -319,7 +326,7 @@ gui_create_quad :: proc(texture_filepath: string = "", event_callback: proc(even
     obj.scale.x = f32(texture.width)
     obj.scale.y = f32(texture.height)
 
-    gui_create_bind_group(id, gui, texture)
+    gui_create_bind_group(id)
 
     return obj
 }
@@ -393,4 +400,297 @@ is_mouse_on_gui :: proc(obj: ^GameObject) -> bool {
     corners[3] += pos
 
     return is_point_in_polygon(cursor, corners)
+}
+
+new_text :: proc(font_id: id_t, text: string, event_callback: proc(event: GuiEvent) = nil, color := vec4_one, loc:=#caller_location) -> ^GameObject {
+    obj := new_empty()
+    txt := new_text_component(obj.id)
+    txt.text = text
+    txt.atlas_id = font_id
+
+    label := concat_cstring({ "text: (", to_string(obj.id), ") ubo" })
+
+    gui := new_gui(obj.id)
+    gui.gui_type = GuiType.TEXT
+    gui.ubo = device_create_buffer({ .CopyDst, .Uniform }, size_of(GuiUbo), label=label)
+    gui.color = color
+
+    mats := update_matrix(obj.id)
+    ui_ubo := GuiUbo{
+        model = mats.model,
+        is_font = 0,
+        color = gui.color,
+    }
+    wgpu.QueueWriteBuffer(device.queue, gui.ubo, 0, &ui_ubo, size_of(GuiUbo))
+
+    if event_callback != nil do gui.event_callback = event_callback
+
+    texture := get_texture(txt.atlas_id)
+
+    entries: [3]wgpu.BindGroupEntry
+    entries[0].binding = 0
+    entries[0].buffer = gui.ubo
+    entries[0].size = size_of(GuiUbo)
+
+    // TEXTURE
+    entries[1].textureView = texture.texture_view;
+    entries[1].binding = 1
+
+    // SAMPLER
+    entries[2].sampler = texture.sampler
+    entries[2].binding = 2
+
+    bind_group_descriptor := wgpu.BindGroupDescriptor{
+        label = concat_cstring({ "gui quad: (", to_string(obj.id), ") bind group" }),
+        entryCount = len(entries),
+        entries = &entries[0],
+        layout = gui_bind_group_layouts[1],
+    }
+
+    gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
+
+    set_text(obj.id, txt.text)
+
+    return obj
+}
+
+set_text :: proc(id: id_t, text: string, loc:=#caller_location) {
+    if len(text) == 0 do return
+
+    txt := get_text_component(id)
+    txt.text = text
+
+    atlas := get_font_component(txt.atlas_id)
+    obj := get_game_obj(id)
+    obj.scale.xy = atlas.size.xy
+
+    size := obj.scale.z
+
+    // vertex stride, 6 f32, vec3 pos and vec3 coords
+    vertices_data := make([]f32, len(text) * 2 * size_of(vec3), context.temp_allocator)
+    indices_data := make([]u32, len(text) * 6, context.temp_allocator)
+
+    x: f32 = 0
+    y: f32 = 0
+
+    vertex_index := 0
+    idx_offset: u32 = 0
+    next_rect_idx: u32 = 0
+
+    begin_idx := rune(atlas.begin_idx)
+    rect_indices_data := [?]u32{ 1, 2, 0, 1, 3, 2 }
+
+    for ch in text {
+        ch_byte_size := len(fmt.tprintf("%c", ch))
+
+        if ch_byte_size > 4 {
+            WARNF("Character `%v`, codepoint: %v, bytes: %v, invalid\n", ch, u32(ch), ch_byte_size)
+            continue
+        }
+
+        switch ch {
+            case 0: continue // nul
+            case '\n': { // new line
+                x = 0
+                y += atlas.glyphs[atlas.begin_idx].advance.y / atlas.size.y
+                continue
+            }
+            case '\t': { // tab
+                x += (atlas.glyphs[atlas.begin_idx].size.x / atlas.size.x) * 4
+                continue
+            }
+            case ' ': { // space
+                x += atlas.glyphs[atlas.begin_idx].size.x / atlas.size.x
+                continue
+            }
+        }
+
+        if ch < begin_idx {
+            WARNF("Character `%v`, codepoint: %v, from atlas: %v, is invalid\n", ch, u32(ch), atlas.filepath)
+            continue
+        }
+
+        if int(ch - begin_idx) > len(atlas.glyphs) {
+            WARNF("Character `%v`, codepoint: %v, not found in atlas: %v, atlas is too small\n", ch, u32(ch), atlas.filepath)
+            continue
+        }
+
+        size := atlas.glyphs[ch - begin_idx].size / atlas.size
+        uv := atlas.glyphs[ch - begin_idx].uv
+
+        x0 := x
+        x1 := x + size.x
+
+        // negative to flip the y value
+        y0 := -(y + atlas.glyphs[ch - begin_idx].pos.y / atlas.size.y)
+        y1 := y0 - size.y
+
+
+        glyph_vertices := [4]vec3{
+            vec3{ x0, y0, 0 }, // top left
+            vec3{ x1, y0, 0 }, // top right
+            vec3{ x0, y1, 0 }, // bottom left
+            vec3{ x1, y1, 0 }, // bottom right
+        }
+
+        glyph_uv := [4]vec3{
+            vec3{ uv.x, uv.y, 0 }, // top left
+            vec3{ uv.z, uv.y, 0 }, // top right
+            vec3{ uv.x, uv.w, 0 }, // bottom left
+            vec3{ uv.z, uv.w, 0 }, // bottom right
+        }
+
+        for i in 0 ..< len(rect_indices_data) {
+            indices_data[idx_offset + u32(i)] = rect_indices_data[i] + next_rect_idx
+        }
+
+        offset := 0
+        for i in 0 ..< len(glyph_vertices) {
+            for w in 0 ..< 3 {
+                vertices_data[vertex_index + offset + w] = glyph_vertices[i][w]
+                vertices_data[vertex_index + offset + w + 3] = glyph_uv[i][w]
+            }
+
+            offset += 6
+        }
+
+        x += size.x
+
+        vertex_index += 2 * size_of(vec3)
+        idx_offset += len(rect_indices_data)
+        next_rect_idx += 4 // 4 sides
+    }
+
+    gui := get_gui(id, loc=loc)
+
+    gui.vertex_buffer_size = u64(size_of(f32) * len(vertices_data))
+    gui.index_buffer_size = u64(size_of(u32) * len(indices_data))
+    gui.index_count = u32(len(indices_data))
+
+    if gui.vertex_buffer != nil {
+        wgpu.BufferDestroy(gui.vertex_buffer)
+        wgpu.BufferRelease(gui.vertex_buffer)
+
+        wgpu.BufferDestroy(gui.index_buffer)
+        wgpu.BufferRelease(gui.index_buffer)
+    }
+
+    label := concat_cstring({ "text: (", to_string(id), ") vertex buffer" })
+
+    gui.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, gui.vertex_buffer_size, label=label)
+    wgpu.QueueWriteBuffer(device.queue, gui.vertex_buffer, 0, &vertices_data[0], uint(gui.vertex_buffer_size))
+
+    label = concat_cstring({ "text: (", to_string(id), ") index buffer" })
+
+    gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
+    wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &indices_data[0], uint(gui.index_buffer_size))
+}
+
+new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#caller_location) -> ^GameObject {
+    obj := new_empty()
+    atlas := new_font_component(obj.id, loc=loc)
+
+    atlas.font_size = font_size
+    atlas.filepath = filepath
+    atlas.padding = padding
+
+    // Load the font file
+    font_data := read_file_to_u8(filepath, allocator=context.temp_allocator)
+    if font_data == nil {
+        ERROR("Failed to read font file.", loc=loc)
+        return obj
+    }
+
+    begin_idx := ' '
+    end_idx := '~'
+
+    // HACK: calculate this shit
+    atlas.begin_idx = u32(begin_idx)
+    atlas.end_idx = u32(end_idx)
+
+    atlas.size.x = 1024
+    atlas.size.y = 1024
+
+    atlas.data = make([^]byte, int(atlas.size.x * atlas.size.y))
+    atlas.glyphs = make([]FontGlyph, int(end_idx - begin_idx))
+
+    //----------------------------------------------------------------------------
+
+    font_info := new(tt.fontinfo, context.temp_allocator)
+    if !tt.InitFont(font_info, &font_data[0], 0) {
+        ERRORF("Failed to initialize the font: %v", filepath)
+        return obj
+    }
+
+    scale := tt.ScaleForPixelHeight(font_info, atlas.font_size)
+    ascent, descent, line_gap: i32
+    tt.GetFontVMetrics(font_info, &ascent, &descent, &line_gap)
+    descent = i32(f32(descent) * scale)
+    ascent = i32(f32(ascent) * scale)
+
+    padding: i32 = 2
+    col, row: i32 = padding, padding
+    glyph_max_height: i32
+
+    for c in begin_idx ..< end_idx {
+        glyph := &atlas.glyphs[u32(c) - atlas.begin_idx]
+
+        advance, lsb: i32
+        tt.GetCodepointHMetrics(font_info, c, &advance, &lsb)
+
+        advance = i32(math.round(f32(advance) * scale))
+        lsb     = i32(math.round(f32(lsb) * scale))
+
+        glyph.advance.x = f32(advance)
+
+        pos, size: vec2i32
+        bitmap := tt.GetCodepointBitmapSubpixel(font_info, scale, scale, 0, 0, c, &size.x, &size.y, &pos.x, &pos.y)
+        glyph.pos.x = f32(pos.x)
+        glyph.pos.y= f32(pos.y)
+
+        glyph_max_height = max(glyph_max_height, size.y)
+
+        if size.x + col > i32(atlas.size.x) {
+            col = padding
+            row += glyph_max_height + padding
+
+            if row > i32(atlas.size.y) {
+                ERRORF("atlas size is too small for the font size, atlas: %v", filepath)
+                return obj
+            }
+        }
+
+        for y in 0 ..< size.y {
+            for x in 0 ..< size.x {
+                atlas.data[(row + y) * i32(atlas.size.x) + col + x] = bitmap[y * size.x + x]
+            }
+        }
+
+        glyph.advance = vec2{ f32(advance), f32(ascent) }
+        glyph.size = vec2{ f32(size.x), f32(size.y) }
+
+        p := vec2{ f32(col) / atlas.size.x, f32(row) / atlas.size.x }
+        s := vec2{ f32(size.x) / atlas.size.x, f32(size.y) / atlas.size.y }
+
+        glyph.uv = vec4{
+            p.x,
+            p.y,
+            p.x + s.x,
+            p.y + s.y,
+        }
+
+        col += size.x + padding
+    }
+
+    // to visualize the atlas
+    //image.write_jpg("test_atlas.jpg", i32(atlas.size.x), i32(atlas.size.y), 1, &atlas.data[0], 100)
+
+    texture := new_texture(obj.id, loc=loc)
+    texture.width = u32(atlas.size.x)
+    texture.height = u32(atlas.size.y)
+    texture.usage = { .TextureBinding, .CopyDst }
+
+    create_texture(obj.id, .R8Unorm, atlas.data)
+
+    return obj
 }

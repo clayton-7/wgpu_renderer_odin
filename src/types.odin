@@ -2,7 +2,6 @@ package main
 
 import "vendor:wgpu"
 import "vendor:glfw"
-import "core:mem"
 import "base:runtime"
 
 // GLOBALS ===================================================
@@ -10,6 +9,7 @@ window : glfw.WindowHandle = nil
 device : Device
 render_textures : RenderTextures
 render_bind_group_layouts: [2]wgpu.BindGroupLayout
+ctx: runtime.Context
 // =--------==================================================
 
 id_t :: distinct u128
@@ -17,6 +17,10 @@ id_t :: distinct u128
 vec2 :: distinct [2]f32
 vec3 :: distinct [3]f32
 vec4 :: distinct [4]f32
+
+vec2i32 :: distinct [2]i32
+vec3i32 :: distinct [3]i32
+vec4i32 :: distinct [4]i32
 
 vec2f64 :: distinct [2]f64
 vec3f64 :: distinct [3]f64
@@ -224,12 +228,6 @@ RenderTextures :: struct {
     depth_texture_view : wgpu.TextureView,
 }
 
-// pub const MVPUbo = packed struct {
-//     model:      math.mat4 = math.mat4_identity,
-//     view:       math.mat4 = math.mat4_identity,
-//     projection: math.mat4 = math.mat4_identity,
-// }
-
 Material :: struct {
     diffuse_filepath:  string,
     normal_filepath:   string,
@@ -290,24 +288,31 @@ Gui :: struct {
     event_callback: proc(event: GuiEvent),
 }
 
-// pub const FontAtlas = struct {
-//     filepath:  []const u8 = "assets/fonts/JetBrainsMono-Regular.ttf",
-//     font_size: f32 = 32,
-//     padding:   u32 = 2,
-//     size:      math.vec2 = math.vec2_zero,
-//
-//     // TODO: use dynamic array
-//     glyphs:   [512]GlyphMetrics = undefined,
-//     // glyphs:   [96]c.stbtt_bakedchar = undefined,
-// }
-//
-// pub const GlyphMetrics = struct {
-//     advance:         math.vec2 = math.vec2_zero,
-//     bitmap_size:     math.vec2 = math.vec2_zero,
-//     bitmap_top_left: math.vec2 = math.vec2_zero,
-//     position:        math.vec2 = math.vec2_zero,
-//     tex_coords:      math.vec2 = math.vec2_zero,
-// }
+Text :: struct {
+    text:     string,
+    atlas_id: id_t,
+    color:    vec4,
+}
+
+FontAtlas :: struct {
+    filepath:  string,
+    font_size: f32,
+    padding:   u32,
+    size:      vec2,
+
+    begin_idx: u32,
+    end_idx:   u32,
+
+    data:   [^]byte,
+    glyphs: []FontGlyph,
+}
+
+FontGlyph :: struct {
+    size:         vec2,
+    pos:     vec2,
+    advance:      vec2,
+    uv:           vec4,
+}
 
 Model :: struct {
     vertices: []Vertex,
@@ -343,6 +348,9 @@ INVALID_ID :: ~id_t(1)
 @(private="file") models: []Model
 @(private="file") materials: []Material
 @(private="file") lights: []Light
+@(private="file") texts: []Text
+@(private="file") fonts: []FontAtlas
+
 @(private="file") comp_id_from_obj_id: [len(Components)][]id_t
 @(private="file") obj_id_from_comp_id: [len(Components)][]id_t
 
@@ -351,6 +359,8 @@ get_textures :: proc() -> []Texture { return textures }
 get_guis :: proc() -> []Gui { return guis }
 get_models :: proc() -> []Model { return models }
 get_lights :: proc() -> []Light { return lights }
+get_texts :: proc() -> []Text { return texts }
+get_fonts :: proc() -> []FontAtlas { return fonts }
 
 GAME_OBJ_MAX :: 256
 TEXTURE_MAX :: 256
@@ -358,6 +368,8 @@ GUI_MAX :: 256
 MODEL_MAX :: 256
 MATERIALS_MAX :: 256
 LIGHT_MAX :: 32
+TEXT_MAX :: 256
+FONT_ATLAS_MAX :: 256
 
 Components :: enum {
     GAME_OBJ,
@@ -366,6 +378,8 @@ Components :: enum {
     TEXTURE,
     MATERIAL,
     LIGHT,
+    TEXT,
+    FONT_ATLAS,
 }
 
 types_init :: proc () {
@@ -375,6 +389,8 @@ types_init :: proc () {
     models = make([]Model, MODEL_MAX)
     materials = make([]Material, MATERIALS_MAX)
     lights = make([]Light, LIGHT_MAX)
+    texts = make([]Text, LIGHT_MAX)
+    fonts = make([]FontAtlas, FONT_ATLAS_MAX)
 
     for i in 0 ..< len(comp_id_from_obj_id) {
         comp_id_from_obj_id[i] = make([]id_t, GAME_OBJ_MAX)
@@ -403,6 +419,8 @@ types_destroy :: proc() {
     delete(models)
     delete(materials)
     delete(lights)
+    delete(texts)
+    delete(fonts)
 }
 
 get_obj_id_from_comp_id :: proc(component_id: int , component_type: Components) -> id_t {
@@ -511,7 +529,6 @@ get_texture :: proc(id: id_t, loc := #caller_location) -> ^Texture {
     return &textures[idx]
 }
 
-
 new_light :: proc(id: id_t, loc := #caller_location) -> ^Light {
     comp_id := set_id(id, u64(Components.LIGHT), loc = loc)
     return &lights[comp_id]
@@ -526,6 +543,38 @@ get_light :: proc(id: id_t, loc := #caller_location) -> ^Light {
     idx := comp_id_from_obj_id[Components.LIGHT][id]
     return &lights[idx]
 }
+
+new_text_component :: proc(id: id_t, loc := #caller_location) -> ^Text {
+    comp_id := set_id(id, u64(Components.TEXT), loc = loc)
+    return &texts[comp_id]
+}
+
+get_text_component :: proc(id: id_t, loc := #caller_location) -> ^Text {
+    if comp_id_from_obj_id[Components.TEXT][id] == INVALID_ID {
+        ERRORF("invalid id: %v\n", id, loc = loc)
+        return nil
+    }
+
+    idx := comp_id_from_obj_id[Components.TEXT][id]
+    return &texts[idx]
+}
+
+new_font_component :: proc(id: id_t, loc := #caller_location) -> ^FontAtlas {
+    comp_id := set_id(id, u64(Components.FONT_ATLAS), loc = loc)
+    return &fonts[comp_id]
+}
+
+get_font_component :: proc(id: id_t, loc := #caller_location) -> ^FontAtlas {
+    if comp_id_from_obj_id[Components.FONT_ATLAS][id] == INVALID_ID {
+        ERRORF("invalid id: %v\n", id, loc = loc)
+        return nil
+    }
+
+    idx := comp_id_from_obj_id[Components.FONT_ATLAS][id]
+    return &fonts[idx]
+}
+
+//------------------------------------------------------------------------------------------
 
 is_valid_component :: proc(id: id_t, comp: Components) -> bool {
     return comp_id_from_obj_id[comp][id] != INVALID_ID

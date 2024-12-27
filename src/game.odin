@@ -1,13 +1,16 @@
 package main
 
 import math "core:math/linalg"
+import "core:fmt"
 
 crosshair: ^GameObject
 rotate_cube: ^GameObject
 cam: ^GameObject
 test_gui: ^GameObject
+font: ^GameObject
+fps_txt: ^GameObject
 
-mouse_speed :: 3.0
+mouse_speed :: 0.5
 cam_speed: f32 = 20.0
 acc: f32 = 0
 cube_speed: f32 = 1
@@ -60,7 +63,8 @@ game_init :: proc(camera: ^GameObject) {
 
         if event.hovering {
             set_texture(event.id, "assets/btn/hover/Play@4x.png")
-            g.color.rgb = 0.7
+            g.color.rg = 0.7
+            g.color.b = 1.0
         } else {
             set_texture(event.id, "assets/btn/normal/Play@4x.png")
             g.color.rgb = 1
@@ -73,6 +77,41 @@ game_init :: proc(camera: ^GameObject) {
     test_gui.position.x = -1920 + test_gui.scale.x
     test_gui.position.y = 1080 - test_gui.scale.y
     test_gui.scale.z = 0.5
+
+    fps_btn := gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
+        g := get_gui(event.id)
+
+        if event.hovering {
+            set_texture(event.id, "assets/btn/hover/MediumArrow-Right@4x.png")
+            g.color.rb = 0.7
+            g.color.g = 1.0
+        } else {
+            set_texture(event.id, "assets/btn/normal/MediumArrow-Right@4x.png")
+            g.color.rgb = 1
+        }
+
+        fps_lock = !event.toggle
+    })
+
+    fps_btn.position.x = -1920 + fps_btn.scale.x * 2 + 12
+    fps_btn.position.y = 1080 - fps_btn.scale.y
+    fps_btn.scale.z = 0.5
+
+    fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.85})
+    fps_bg.scale.x = 500
+    fps_bg.scale.y = 32
+    fps_bg.position.x = -WIN_SIZE.x / 2 - 450
+    fps_bg.position.y = WIN_SIZE.y - 40
+    fps_bg.position.z = 0.001
+
+    font = new_font_atlas("assets/fonts/JetBrainsMono-Regular.ttf", 0, 70)
+    fps_txt = new_text(font.id, "")
+    //fps_txt.scale = 1.25
+    fps_txt.position.x = -WIN_SIZE.x + 16
+    fps_txt.position.y = WIN_SIZE.y - 56
+
+    // TODO: set parent
+    //set_parent(fps_bg.id, fps_txt.id)
 }
 
 game_destroy :: proc() {
@@ -82,7 +121,7 @@ game_destroy :: proc() {
 rotate_camera :: proc(dt: f32) {
     pos := window_get_cursor_position_f32()
 
-    rotate := (pos - last_pos) * mouse_speed * dt
+    rotate := (pos - last_pos) * mouse_speed * 0.1
     last_pos = pos
 
     cam.rotation.xy += rotate.yx
@@ -130,11 +169,20 @@ move_camera :: proc(dt: f32) {
     }
 }
 
+time: f64
 game_update :: proc(dt: f64) {
     delta := f32(dt)
     rotate_cube.rotation.xy += 45 * delta * cube_speed
 
     move_camera(delta)
+
+    time += dt
+
+    if time > 0.1 {
+        str := fmt.tprintf("FPS: %.2f  (%v ms)", 1 / dt, dt * 1000)
+        set_text(fps_txt.id, str)
+        time = 0
+    }
 }
 
 game_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {

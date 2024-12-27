@@ -44,7 +44,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     if (model_ubo.is_font == 1) {
         if (res.r <= 0.0) { discard; }
         return pow(res.r * model_ubo.color, vec4f(2.2)); // srgb to linear
-
     }
 
     if (res.a <= 0.0) { discard; }

@@ -1,24 +1,21 @@
 package main
 
 import "vendor:wgpu"
-import "base:runtime"
-import "core:os"
-
-@(private="file") ctx : runtime.Context
 
 device_init :: proc() {
-    ctx := context
-
     instance := wgpu.CreateInstance(nil)
     defer wgpu.InstanceRelease(instance)
 
     if instance == nil do FATAL("wgpu is not supported")
 
     // SURFACE ADAPTER
-    adapter_options := wgpu.RequestAdapterOptions{ powerPreference = wgpu.PowerPreference.HighPerformance }
+    adapter_options := wgpu.RequestAdapterOptions{
+        powerPreference = wgpu.PowerPreference.HighPerformance,
+        compatibleSurface = device.surface,
+    }
 
     device.surface = window_get_surface(instance)
-    wgpu.InstanceRequestAdapter(instance, &{ compatibleSurface = device.surface }, on_adapter, nil)
+    wgpu.InstanceRequestAdapter(instance, &adapter_options, on_adapter, nil)
 
     on_adapter :: proc "c" (status: wgpu.RequestAdapterStatus, adapter: wgpu.Adapter, message: cstring, userdata: rawptr) {
         context = ctx
@@ -62,10 +59,6 @@ next_pow2 :: proc(x :u64) -> u64 {
     for (v < x) do v <<= 1 // left shift until v is greater than x
 
     return v
-}
-
-device_write_buffer :: proc(buffer: wgpu.Buffer, data: rawptr, size: u64) {
-    wgpu.QueueWriteBuffer(device.queue, buffer, 0, data, uint(next_pow2(size)))
 }
 
 device_create_surface_textures :: proc(size: vec2) {
@@ -168,7 +161,7 @@ device_get_default_pipeline :: proc(pipeline: ^Pipeline) {
     pipeline.pipeline_descriptor.primitive.stripIndexFormat = .Undefined // Undefined == vertices are considered sequentially
     pipeline.pipeline_descriptor.primitive.frontFace = .CW
     pipeline.pipeline_descriptor.primitive.cullMode = .Back
-     // pipeline.pipeline_descriptor.primitive.cullMode = .None
+    // pipeline.pipeline_descriptor.primitive.cullMode = .None
 
     pipeline.depth_texture_format = .Depth24Plus
     pipeline.depth_stencil_state.format = .Depth24Plus

@@ -22,8 +22,6 @@ window_init :: proc(win_size: vec2, name: cstring) -> glfw.WindowHandle {
 
     if window == nil do FATAL("Failed to create GLFW window")
 
-    // glfw.SetFramebufferSizeCallback(window, size_callback)
-
     return window
 }
 
