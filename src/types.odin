@@ -2,6 +2,7 @@ package main
 
 import "vendor:wgpu"
 import "vendor:glfw"
+import tt "vendor:stb/truetype"
 import "base:runtime"
 
 // GLOBALS ===================================================
@@ -303,8 +304,10 @@ FontAtlas :: struct {
     begin_idx: u32,
     end_idx:   u32,
 
-    data:   [^]byte,
-    glyphs: []FontGlyph,
+    scale:     f32,
+    data:      [^]byte,
+    glyphs:    []FontGlyph,
+    font_info: ^tt.fontinfo
 }
 
 FontGlyph :: struct {

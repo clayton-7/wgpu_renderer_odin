@@ -109,6 +109,7 @@ destroy_fonts :: proc() {
         if f.data == nil do continue
 
         free(f.data)
+        free(f.font_info)
         delete(f.glyphs)
     }
 }

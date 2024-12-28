@@ -98,17 +98,20 @@ game_init :: proc(camera: ^GameObject) {
     fps_btn.scale.z = 0.5
 
     fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.85})
-    fps_bg.scale.x = 500
+    fps_bg.scale.x = 480
     fps_bg.scale.y = 32
-    fps_bg.position.x = -WIN_SIZE.x / 2 - 450
-    fps_bg.position.y = WIN_SIZE.y - 40
+    fps_bg.position.x = -WIN_SIZE.x / 2 - 475
+    fps_bg.position.y = WIN_SIZE.y - 35
+
+    // HACK: fix the z order
     fps_bg.position.z = 0.001
 
     font = new_font_atlas("assets/fonts/JetBrainsMono-Regular.ttf", 0, 70)
     fps_txt = new_text(font.id, "")
-    //fps_txt.scale = 1.25
     fps_txt.position.x = -WIN_SIZE.x + 16
     fps_txt.position.y = WIN_SIZE.y - 56
+
+    new_text(font.id, "testt text\n\tand break lines~!\ntest kerning: 'away AWAY'")
 
     // TODO: set parent
     //set_parent(fps_bg.id, fps_txt.id)
@@ -179,7 +182,7 @@ game_update :: proc(dt: f64) {
     time += dt
 
     if time > 0.1 {
-        str := fmt.tprintf("FPS: %.2f  (%v ms)", 1 / dt, dt * 1000)
+        str := fmt.tprintf("FPS:%.2f (%v ms)", 1 / dt, dt * 1000)
         set_text(fps_txt.id, str)
         time = 0
     }

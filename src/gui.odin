@@ -4,6 +4,8 @@ import "vendor:wgpu"
 import tt "vendor:stb/truetype"
 import "core:math"
 import "core:fmt"
+import "core:unicode/utf8"
+
 
 @(private="file") pipeline: Pipeline
 @(private="file") gui_bind_group_layouts: [2]wgpu.BindGroupLayout
@@ -480,27 +482,29 @@ set_text :: proc(id: id_t, text: string, loc:=#caller_location) {
     begin_idx := rune(atlas.begin_idx)
     rect_indices_data := [?]u32{ 1, 2, 0, 1, 3, 2 }
 
-    for ch in text {
+    for ch, idx in text {
         ch_byte_size := len(fmt.tprintf("%c", ch))
 
         if ch_byte_size > 4 {
-            WARNF("Character `%v`, codepoint: %v, bytes: %v, invalid\n", ch, u32(ch), ch_byte_size)
+            WARNF("Character `%v`, codepoint: %v, bytes: %v, not supported\n", ch, u32(ch), ch_byte_size)
             continue
         }
+
+        spc_advance := atlas.glyphs[' '].advance
 
         switch ch {
             case 0: continue // nul
             case '\n': { // new line
                 x = 0
-                y += atlas.glyphs[atlas.begin_idx].advance.y / atlas.size.y
+                y += spc_advance.y
                 continue
             }
             case '\t': { // tab
-                x += (atlas.glyphs[atlas.begin_idx].size.x / atlas.size.x) * 4
+                x += spc_advance.x * 4
                 continue
             }
             case ' ': { // space
-                x += atlas.glyphs[atlas.begin_idx].size.x / atlas.size.x
+                x += spc_advance.x
                 continue
             }
         }
@@ -524,7 +528,6 @@ set_text :: proc(id: id_t, text: string, loc:=#caller_location) {
         // negative to flip the y value
         y0 := -(y + atlas.glyphs[ch - begin_idx].pos.y / atlas.size.y)
         y1 := y0 - size.y
-
 
         glyph_vertices := [4]vec3{
             vec3{ x0, y0, 0 }, // top left
@@ -551,10 +554,18 @@ set_text :: proc(id: id_t, text: string, loc:=#caller_location) {
                 vertices_data[vertex_index + offset + w + 3] = glyph_uv[i][w]
             }
 
+            // stride, 2 vec3
             offset += 6
         }
 
-        x += size.x
+        x += atlas.glyphs[ch - begin_idx].advance.x
+
+        if idx < len(text) - 1 {
+            next_char, _ := utf8.decode_rune_in_string(text[idx + 1:])
+
+            kern := tt.GetCodepointKernAdvance(atlas.font_info, ch, next_char)
+            x += math.round(f32(kern) * atlas.scale) / atlas.size.x
+        }
 
         vertex_index += 2 * size_of(vec3)
         idx_offset += len(rect_indices_data)
@@ -602,7 +613,7 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
     }
 
     begin_idx := ' '
-    end_idx := '~'
+    end_idx := '~' + 1
 
     // HACK: calculate this shit
     atlas.begin_idx = u32(begin_idx)
@@ -612,19 +623,22 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
     atlas.size.y = 1024
 
     atlas.data = make([^]byte, int(atlas.size.x * atlas.size.y))
+    // HACK: this should be a map because languages like japanese, chinese has an index too big to do in this way
     atlas.glyphs = make([]FontGlyph, int(end_idx - begin_idx))
 
     //----------------------------------------------------------------------------
 
-    font_info := new(tt.fontinfo, context.temp_allocator)
-    if !tt.InitFont(font_info, &font_data[0], 0) {
+    atlas.font_info = new(tt.fontinfo)
+    if !tt.InitFont(atlas.font_info, &font_data[0], 0) {
         ERRORF("Failed to initialize the font: %v", filepath)
         return obj
     }
 
-    scale := tt.ScaleForPixelHeight(font_info, atlas.font_size)
+    scale := tt.ScaleForPixelHeight(atlas.font_info, atlas.font_size)
+    atlas.scale = scale
+
     ascent, descent, line_gap: i32
-    tt.GetFontVMetrics(font_info, &ascent, &descent, &line_gap)
+    tt.GetFontVMetrics(atlas.font_info, &ascent, &descent, &line_gap)
     descent = i32(f32(descent) * scale)
     ascent = i32(f32(ascent) * scale)
 
@@ -636,15 +650,13 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
         glyph := &atlas.glyphs[u32(c) - atlas.begin_idx]
 
         advance, lsb: i32
-        tt.GetCodepointHMetrics(font_info, c, &advance, &lsb)
+        tt.GetCodepointHMetrics(atlas.font_info, c, &advance, &lsb)
 
         advance = i32(math.round(f32(advance) * scale))
         lsb     = i32(math.round(f32(lsb) * scale))
 
-        glyph.advance.x = f32(advance)
-
         pos, size: vec2i32
-        bitmap := tt.GetCodepointBitmapSubpixel(font_info, scale, scale, 0, 0, c, &size.x, &size.y, &pos.x, &pos.y)
+        bitmap := tt.GetCodepointBitmapSubpixel(atlas.font_info, scale, scale, 0, 0, c, &size.x, &size.y, &pos.x, &pos.y)
         glyph.pos.x = f32(pos.x)
         glyph.pos.y= f32(pos.y)
 
@@ -666,7 +678,7 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
             }
         }
 
-        glyph.advance = vec2{ f32(advance), f32(ascent) }
+        glyph.advance = vec2{ f32(advance - lsb) / atlas.size.x, f32(ascent + descent + line_gap + 4) / atlas.size.y }
         glyph.size = vec2{ f32(size.x), f32(size.y) }
 
         p := vec2{ f32(col) / atlas.size.x, f32(row) / atlas.size.x }
