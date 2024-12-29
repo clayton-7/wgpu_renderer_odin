@@ -53,7 +53,7 @@ device_create_buffer :: proc(usage_flags: wgpu.BufferUsageFlags, size: u64, mapp
     })
 }
 
-next_pow2 :: proc(x :u64) -> u64 {
+next_pow2 :: proc(x: u64) -> u64 {
     if x <= 1 do return 1
     v := u64(1)
     for (v < x) do v <<= 1 // left shift until v is greater than x

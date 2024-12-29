@@ -4,6 +4,7 @@ import "vendor:wgpu"
 import "vendor:glfw"
 import tt "vendor:stb/truetype"
 import "base:runtime"
+import "core:sort"
 
 // GLOBALS ===================================================
 window : glfw.WindowHandle = nil
@@ -357,9 +358,12 @@ INVALID_ID :: ~id_t(1)
 @(private="file") comp_id_from_obj_id: [len(Components)][]id_t
 @(private="file") obj_id_from_comp_id: [len(Components)][]id_t
 
+@(private="file") sorted_gui_indices: []vec2
+
 get_game_objs :: proc() -> []GameObject { return game_objects }
 get_textures :: proc() -> []Texture { return textures }
 get_guis :: proc() -> []Gui { return guis }
+get_sorted_gui_indices :: proc() -> []vec2 { return sorted_gui_indices }
 get_models :: proc() -> []Model { return models }
 get_lights :: proc() -> []Light { return lights }
 get_texts :: proc() -> []Text { return texts }
@@ -395,6 +399,12 @@ types_init :: proc () {
     texts = make([]Text, LIGHT_MAX)
     fonts = make([]FontAtlas, FONT_ATLAS_MAX)
 
+    sorted_gui_indices = make([]vec2, GUI_MAX)
+
+    for &g in sorted_gui_indices {
+        g.x = -1
+    }
+
     for i in 0 ..< len(comp_id_from_obj_id) {
         comp_id_from_obj_id[i] = make([]id_t, GAME_OBJ_MAX)
         obj_id_from_comp_id[i] = make([]id_t, GAME_OBJ_MAX)
@@ -424,6 +434,7 @@ types_destroy :: proc() {
     delete(lights)
     delete(texts)
     delete(fonts)
+    delete(sorted_gui_indices)
 }
 
 get_obj_id_from_comp_id :: proc(component_id: int , component_type: Components) -> id_t {
@@ -474,6 +485,8 @@ get_game_obj :: proc(id: id_t, loc := #caller_location) -> ^GameObject {
 
 new_gui :: proc(id: id_t, loc := #caller_location) -> ^Gui {
     comp_id := set_id(id, u64(Components.GUI), loc = loc)
+
+    gui_set_render_index(id, 0)
     return &guis[comp_id]
 }
 
@@ -575,6 +588,19 @@ get_font_component :: proc(id: id_t, loc := #caller_location) -> ^FontAtlas {
 
     idx := comp_id_from_obj_id[Components.FONT_ATLAS][id]
     return &fonts[idx]
+}
+
+set_render_index :: proc(id: id_t, loc := #caller_location) {
+    if comp_id_from_obj_id[Components.GUI][id] == INVALID_ID {
+        ERRORF("invalid id: %v\n", id, loc = loc)
+        return
+    }
+
+    sorted_gui_indices[id].x = f32(comp_id_from_obj_id[Components.GUI][id])
+    sorted_gui_indices[id].y = get_game_obj(id).position.z + 1
+    sort.quick_sort_proc(sorted_gui_indices[:], proc(a, b: vec2) -> int {
+        return int(a.y - b.y)
+    })
 }
 
 //------------------------------------------------------------------------------------------

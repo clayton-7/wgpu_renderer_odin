@@ -134,7 +134,22 @@ render_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, glob
 
         if !go.enabled do continue
 
+        original_transform := []f32{ go.position.x, go.position.y, go.position.z, go.rotation.x, go.rotation.y, go.rotation.z, go.scale.z }
+
+        if go.parent != INVALID_ID {
+            parent := get_game_obj(go.parent)
+            go.position += parent.position
+            go.rotation += parent.rotation
+            go.scale.z *= parent.scale.z
+        }
+
         mat := update_matrix(id)
+
+        if go.parent != INVALID_ID {
+            go.position = vec3{ original_transform[0], original_transform[1], original_transform[2] }
+            go.rotation = vec3{ original_transform[3], original_transform[4], original_transform[5] }
+            go.scale.z = original_transform[6]
+        }
 
         material := get_material(id)
         ubo := ModelUbo{

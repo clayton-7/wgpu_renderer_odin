@@ -21,7 +21,10 @@ import "core:unicode/utf8"
 gui_init :: proc() {
     pipeline.shader_filepath = "assets/shaders/gui.wgsl"
     device_get_default_pipeline(&pipeline)
+
     pipeline.pipeline_descriptor.label = "gui pipeline"
+    // TODO: disable depth for only transparent objs
+    pipeline.depth_stencil_state.depthWriteEnabled = false
 
     vertex_attributes := [2]wgpu.VertexAttribute{}
     vertex_attributes[0].shaderLocation = 0
@@ -128,16 +131,38 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
     // TODO: make an ubo struct for guis
     wgpu.QueueWriteBuffer(queue, gui_global_buffer, 0, &ubo, size_of(GlobalUbo))
 
-    guis := get_guis()
-    for g, i in guis {
-        id := get_obj_id_from_comp_id(i, Components.GUI)
+    //guis := get_guis()
+    gui_indices := get_sorted_gui_indices()
+
+    for gui_idx, i in gui_indices {
+        if gui_idx.x < 0 do continue
+
+        id := get_obj_id_from_comp_id(int(gui_idx.x), .GUI)
+        g := get_gui(id)
 
         if g.ubo == nil do return
 
         go := get_game_obj(id)
         if !go.enabled do continue
 
+        original_transform := []f32{ go.position.x, go.position.y, go.position.z, go.rotation.x, go.rotation.y, go.rotation.z, go.scale.z }
+
+        if go.parent != INVALID_ID {
+            parent := get_game_obj(go.parent)
+            go.position += parent.position
+            go.rotation += parent.rotation
+            go.scale.z *= parent.scale.z
+        }
+
+        go.position.z = 0
         model_matrix := update_matrix(id, is_2d = true).model
+        go.position.z = original_transform[2]
+
+        if go.parent != INVALID_ID {
+            go.position = vec3{ original_transform[0], original_transform[1], original_transform[2] }
+            go.rotation = vec3{ original_transform[3], original_transform[4], original_transform[5] }
+            go.scale.z = original_transform[6]
+        }
 
         is_font : u32 = 0
         if g.gui_type == .TEXT {
@@ -247,6 +272,11 @@ gui_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
             g.event_callback(e)
         }
     }
+}
+
+gui_set_render_index :: proc(id: id_t, index: u32) {
+    get_game_obj(id).position.z = f32(index)
+    set_render_index(id)
 }
 
 gui_create_bind_group :: proc(id: id_t) {
@@ -667,7 +697,7 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
             row += glyph_max_height + padding
 
             if row > i32(atlas.size.y) {
-                ERRORF("atlas size is too small for the font size, atlas: %v", filepath)
+                ERRORF("atlas size is too small for the font size, reduce the font size or increase the atlas size, atlas: %v", filepath)
                 return obj
             }
         }

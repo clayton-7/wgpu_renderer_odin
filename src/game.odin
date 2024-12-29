@@ -29,6 +29,7 @@ game_init :: proc(camera: ^GameObject) {
 
     crosshair = gui_create_quad(color = vec4{ 0, 1, 0, 1 })
     crosshair.scale.xy = 6
+    gui_set_render_index(crosshair.id, 999)
 
     mat.diffuse_filepath = "assets/models/brick.jpg"
     mat.normal_filepath = "assets/models/brick_normal.jpg"
@@ -97,24 +98,20 @@ game_init :: proc(camera: ^GameObject) {
     fps_btn.position.y = 1080 - fps_btn.scale.y
     fps_btn.scale.z = 0.5
 
-    fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.85})
-    fps_bg.scale.x = 480
+    fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.75})
+    fps_bg.scale.x = 360
     fps_bg.scale.y = 32
-    fps_bg.position.x = -WIN_SIZE.x / 2 - 475
+    fps_bg.position.x = -WIN_SIZE.x / 2 - 590
     fps_bg.position.y = WIN_SIZE.y - 35
-
-    // HACK: fix the z order
-    fps_bg.position.z = 0.001
+    gui_set_render_index(fps_bg.id, 1)
 
     font = new_font_atlas("assets/fonts/JetBrainsMono-Regular.ttf", 0, 70)
     fps_txt = new_text(font.id, "")
-    fps_txt.position.x = -WIN_SIZE.x + 16
-    fps_txt.position.y = WIN_SIZE.y - 56
+    fps_txt.position.x = -330
+    fps_txt.position.y = -20
+    gui_set_render_index(fps_txt.id, 2)
 
-    new_text(font.id, "testt text\n\tand break lines~!\ntest kerning: 'away AWAY'")
-
-    // TODO: set parent
-    //set_parent(fps_bg.id, fps_txt.id)
+    set_parent(fps_bg.id, fps_txt.id)
 }
 
 game_destroy :: proc() {
@@ -182,7 +179,7 @@ game_update :: proc(dt: f64) {
     time += dt
 
     if time > 0.1 {
-        str := fmt.tprintf("FPS:%.2f (%v ms)", 1 / dt, dt * 1000)
+        str := fmt.tprintf("FPS:%.2f (%.6f ms)", 1 / dt, dt * 1000)
         set_text(fps_txt.id, str)
         time = 0
     }

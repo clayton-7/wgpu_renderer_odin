@@ -42,10 +42,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let res = textureSample(ui_texture, ui_sampler, in.uv).rgba;
 
     if (model_ubo.is_font == 1) {
-        if (res.r <= 0.0) { discard; }
+        if (res.r <= 0.1) { discard; }
         return pow(res.r * model_ubo.color, vec4f(2.2)); // srgb to linear
     }
 
-    if (res.a <= 0.0) { discard; }
+    if (res.a <= 0.1) { discard; }
     return pow(res * model_ubo.color, vec4f(2.2)); // srgb to linear
 }

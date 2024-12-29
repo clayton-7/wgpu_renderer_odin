@@ -146,6 +146,7 @@ new_empty :: proc(position := vec3_zero, rotation := vec3_zero, scale := vec3_on
     go.position = position
     go.rotation = rotation
     go.scale = scale
+    go.parent = INVALID_ID
 
     return go
 }
@@ -409,6 +410,10 @@ get_object_up_dir :: proc(obj_id: id_t) -> vec3 {
 
 set_scale :: proc(obj_id: id_t, scale: vec3) {
     get_game_obj(obj_id).scale *= scale
+}
+
+set_parent :: proc(parent_id, child_id: id_t) {
+    get_game_obj(child_id).parent = parent_id
 }
 
 load_gltf :: proc(id: id_t, loc := #caller_location) {
