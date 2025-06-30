@@ -45,8 +45,7 @@ skybox_init :: proc(enabled: bool = true) {
     pipeline.pipeline_descriptor.label = "skybox pipeline"
 
     // DISABLE DEPTH WRITING
-    pipeline.depth_stencil_state.depthWriteEnabled = false
-    // pipeline.pipeline_descriptor.primitive.cullMode = .Back
+    pipeline.depth_stencil_state.depthWriteEnabled = .False
     pipeline.pipeline_descriptor.primitive.cullMode = .Front
 
     vertex_attributes := [1]wgpu.VertexAttribute{}
@@ -149,9 +148,13 @@ skybox_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, glob
     mvp.view = global_ubo.view
 
     // BLOCK SKYBOX MOVEMENT
-    mvp.view[12] = 0
-    mvp.view[13] = 0
-    mvp.view[14] = 0
+    // mvp.view[12] = 0
+    // mvp.view[13] = 0
+    // mvp.view[14] = 0
+    // TEST:
+    mvp.view[3, 0] = 0
+    mvp.view[3, 1] = 0
+    mvp.view[3, 2] = 0
 
     wgpu.QueueWriteBuffer(queue, mvp_buffer, 0, &mvp, size_of(MVPUbo))
     model := get_model(skybox_obj.id)

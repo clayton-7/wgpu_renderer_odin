@@ -1,6 +1,7 @@
 package main
 
 import math "core:math/linalg"
+import mu "vendor:microui"
 import "core:fmt"
 
 crosshair: ^GameObject
@@ -9,16 +10,18 @@ cam: ^GameObject
 test_gui: ^GameObject
 font: ^GameObject
 fps_txt: ^GameObject
+cube1: ^GameObject
+ground: ^GameObject
 
 mouse_speed :: 0.5
-cam_speed: f32 = 20.0
+cam_speed: f32 = 12.0
 acc: f32 = 0
 cube_speed: f32 = 1
 last_pos: vec2
 
 game_init :: proc(camera: ^GameObject) {
     cam = camera
-     window_enable_cursor(false)
+    window_enable_cursor(false)
 
     mat := Material{
         diffuse_filepath = "assets/models/c.png",
@@ -43,21 +46,23 @@ game_init :: proc(camera: ^GameObject) {
     cube := new_object("assets/models/cube.gltf", mat)
     cube.position.y = 0.5
 
-    cube1 := new_object("assets/models/cube.gltf")
+    cube1 = new_object("assets/models/cube.gltf")
     cube1.position.x = -2.5
-    cube1.position.y = 0.5
+    cube1.position.y = 5.5
+    cube1.rotation.z = 22
+    cube1.quat = vec3_to_quat(vec3{ 40, 0, 0 })
 
     mat.diffuse_filepath = "assets/models/c.png"
     mat.normal_filepath = "assets/models/cn.png"
     mat.texture_tilling = 62
 
-    ground := new_object("assets/models/plane.gltf", mat)
+    ground = new_object("assets/models/plane.gltf", mat)
     ground.position.y = -1
     ground.rotation.x = 0
     ground.scale.xyz = 100
 
-    light := new_light_obj(.DirectionalLight, { 1, 1, 1, 1.3 })
-    light.rotation.x = 40
+    light := new_light_obj(.Directional, { 1, 1, 1, 1 })
+    light.rotation.x = 45
 
     test_gui = gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
         g := get_gui(event.id)
@@ -75,9 +80,9 @@ game_init :: proc(camera: ^GameObject) {
         }
     })
 
-    test_gui.position.x = -1920 + test_gui.scale.x
-    test_gui.position.y = 1080 - test_gui.scale.y
     test_gui.scale.z = 0.5
+    test_gui.position.x = -WIN_SIZE.x + test_gui.scale.x / 2 + 6
+    test_gui.position.y = WIN_SIZE.y - test_gui.scale.y / 1.15
 
     fps_btn := gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
         g := get_gui(event.id)
@@ -94,14 +99,14 @@ game_init :: proc(camera: ^GameObject) {
         fps_lock = !event.toggle
     })
 
-    fps_btn.position.x = -1920 + fps_btn.scale.x * 2 + 12
-    fps_btn.position.y = 1080 - fps_btn.scale.y
     fps_btn.scale.z = 0.5
+    fps_btn.position.x = -WIN_SIZE.x + fps_btn.scale.x * 1.5 + 6
+    fps_btn.position.y = WIN_SIZE.y - fps_btn.scale.y / 1.15
 
     fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.75})
     fps_bg.scale.x = 360
     fps_bg.scale.y = 32
-    fps_bg.position.x = -WIN_SIZE.x / 2 - 590
+    fps_bg.position.x = -WIN_SIZE.x + fps_bg.scale.x + 6
     fps_bg.position.y = WIN_SIZE.y - 35
     gui_set_render_index(fps_bg.id, 1)
 
@@ -183,6 +188,8 @@ game_update :: proc(dt: f64) {
         set_text(fps_txt.id, str)
         time = 0
     }
+
+    test_collider(cube1, ground, f32(dt))
 }
 
 game_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {

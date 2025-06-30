@@ -5,7 +5,7 @@ import tt "vendor:stb/truetype"
 import "core:math"
 import "core:fmt"
 import "core:unicode/utf8"
-
+import "core:strings"
 
 @(private="file") pipeline: Pipeline
 @(private="file") gui_bind_group_layouts: [2]wgpu.BindGroupLayout
@@ -24,7 +24,7 @@ gui_init :: proc() {
 
     pipeline.pipeline_descriptor.label = "gui pipeline"
     // TODO: disable depth for only transparent objs
-    pipeline.depth_stencil_state.depthWriteEnabled = false
+    pipeline.depth_stencil_state.depthWriteEnabled = .False
 
     vertex_attributes := [2]wgpu.VertexAttribute{}
     vertex_attributes[0].shaderLocation = 0
@@ -297,7 +297,7 @@ gui_create_bind_group :: proc(id: id_t) {
     entries[2].binding = 2
 
     bind_group_descriptor := wgpu.BindGroupDescriptor{
-        label = concat_cstring({ "gui quad: (", to_string(id), ") bind group" }),
+        label = strings.concatenate({ "gui quad: (", to_string(id), ") bind group" }, context.temp_allocator),
         entryCount = len(entries),
         entries = &entries[0],
         layout = gui_bind_group_layouts[1],
@@ -310,7 +310,7 @@ gui_create_quad :: proc(texture_filepath: string = "", event_callback: proc(even
     obj := new_empty()
     id := obj.id
 
-    label := concat_cstring({ "gui quad: (", to_string(id), ") ubo" })
+    label := strings.concatenate({ "gui quad: (", to_string(id), ") ubo" }, context.temp_allocator)
 
     gui := new_gui(id)
     gui.gui_type = GuiType.IMAGE
@@ -341,12 +341,12 @@ gui_create_quad :: proc(texture_filepath: string = "", event_callback: proc(even
     gui.index_buffer_size = size_of(u32) * len(index_data)
     gui.index_count = len(index_data)
 
-    label = concat_cstring({ "gui quad: (", to_string(id), ") vertex buffer" })
+    label = strings.concatenate({ "gui quad: (", to_string(id), ") vertex buffer" }, context.temp_allocator)
 
     gui.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, gui.vertex_buffer_size, label=label)
     wgpu.QueueWriteBuffer(device.queue, gui.vertex_buffer, 0, &vertex_data, uint(gui.vertex_buffer_size))
 
-    label = concat_cstring({ "gui quad: (", to_string(id), ") index buffer" })
+    label = strings.concatenate({ "gui quad: (", to_string(id), ") index buffer" }, context.temp_allocator)
 
     gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
     wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &index_data, uint(gui.index_buffer_size))
@@ -440,7 +440,7 @@ new_text :: proc(font_id: id_t, text: string, event_callback: proc(event: GuiEve
     txt.text = text
     txt.atlas_id = font_id
 
-    label := concat_cstring({ "text: (", to_string(obj.id), ") ubo" })
+    label := strings.concatenate({ "text: (", to_string(obj.id), ") ubo" }, context.temp_allocator)
 
     gui := new_gui(obj.id)
     gui.gui_type = GuiType.TEXT
@@ -473,7 +473,7 @@ new_text :: proc(font_id: id_t, text: string, event_callback: proc(event: GuiEve
     entries[2].binding = 2
 
     bind_group_descriptor := wgpu.BindGroupDescriptor{
-        label = concat_cstring({ "gui quad: (", to_string(obj.id), ") bind group" }),
+        label = strings.concatenate({ "gui quad: (", to_string(obj.id), ") bind group" }, context.temp_allocator),
         entryCount = len(entries),
         entries = &entries[0],
         layout = gui_bind_group_layouts[1],
@@ -616,12 +616,12 @@ set_text :: proc(id: id_t, text: string, loc:=#caller_location) {
         wgpu.BufferRelease(gui.index_buffer)
     }
 
-    label := concat_cstring({ "text: (", to_string(id), ") vertex buffer" })
+    label := strings.concatenate({ "text: (", to_string(id), ") vertex buffer" }, context.temp_allocator)
 
     gui.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, gui.vertex_buffer_size, label=label)
     wgpu.QueueWriteBuffer(device.queue, gui.vertex_buffer, 0, &vertices_data[0], uint(gui.vertex_buffer_size))
 
-    label = concat_cstring({ "text: (", to_string(id), ") index buffer" })
+    label = strings.concatenate({ "text: (", to_string(id), ") index buffer" }, context.temp_allocator)
 
     gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
     wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &indices_data[0], uint(gui.index_buffer_size))
@@ -722,6 +722,7 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
         }
 
         col += size.x + padding
+        tt.FreeBitmap(bitmap, nil)
     }
 
     // to visualize the atlas

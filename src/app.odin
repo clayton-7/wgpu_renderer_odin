@@ -5,13 +5,14 @@ import "vendor:wgpu"
 import "core:time"
 
 WIN_TITLE :: "Force"
+FOV :: 90
 
 TARGET_FPS :: 60.0
 fps_lock: bool = true
  //WIN_SIZE :: vec2{ 1024, 1024 }
 WIN_SIZE :: vec2{ 1920, 1080 }
 // WIN_SIZE :: vec2{ 2560, 1440 }
- //WIN_SIZE :: vec2{ 3840, 2160 }
+ // WIN_SIZE :: vec2{ 3840, 2160 }
 
 app_init :: proc() {
     ctx = context
@@ -66,22 +67,31 @@ app_update :: proc() {
         aspect: f32 = window_get_fixed_aspect()
         view_yxz := get_view_yxz(camera.position, camera.rotation)
 
-        global_ubo.projection = get_perspective_projection_matrix(110, aspect, 0.01, 3000)
+        global_ubo.projection = get_perspective_projection_matrix(FOV, aspect, 0.01, 3000)
         global_ubo.view = view_yxz.view
         global_ubo.inverse_view = view_yxz.inverse_view
 
-        // DEBUGF("FPS: %.2f\n", 1.0 / delta_time)
-
-        cmd_encoder_descriptor: wgpu.CommandEncoderDescriptor = { nextInChain = nil, label = "Draw command encoder" }
+        cmd_encoder_descriptor: wgpu.CommandEncoderDescriptor = { label = "Draw command encoder" }
         encoder: wgpu.CommandEncoder = wgpu.DeviceCreateCommandEncoder(device.device, &cmd_encoder_descriptor)
 
         // TEXTURE VIEW
         surface_texture := wgpu.SurfaceGetCurrentTexture(device.surface)
         defer wgpu.TextureRelease(surface_texture.texture)
 
-        if surface_texture.status != .Success {
-            INFOF("Cannot acquire the current render texture, status: %v\n", enum_to_string(surface_texture.status))
-            continue
+        switch surface_texture.status {
+            case .SuccessOptimal, .SuccessSuboptimal:
+
+            case .Timeout, .Outdated, .Lost:
+                INFOF("Cannot acquire the current render texture, status: %v\n", enum_to_string(surface_texture.status))
+
+                if surface_texture.texture != nil {
+                    wgpu.TextureRelease(surface_texture.texture)
+                }
+                app_resize(window, i32(WIN_SIZE.x), i32(WIN_SIZE.y))
+                return
+
+            case .OutOfMemory, .DeviceLost, .Error:
+                FATALF("Fatal error on the current render texture, status: %v\n", enum_to_string(surface_texture.status))
         }
 
         tex_view_desc := wgpu.TextureViewDescriptor{
@@ -94,6 +104,78 @@ app_update :: proc() {
 
         current_texture_view := wgpu.TextureCreateView(surface_texture.texture, &tex_view_desc)
         render_pass: wgpu.RenderPassEncoder = render_begin_render_pass(current_texture_view, encoder, vec4f64_zero)
+
+        // shadow_render_pass :: proc() {
+        //     depth_texture_format: wgpu.TextureFormat = .Depth24Plus
+        //
+        //     depth_texture_descriptor := wgpu.TextureDescriptor{
+        //         dimension       = ._2D,
+        //         format          = depth_texture_format,
+        //         mipLevelCount   = 1,
+        //         sampleCount     = 1,
+        //         size            = { 2048, 2048, 1 },
+        //         usage           = { .RenderAttachment },
+        //         viewFormatCount = 1,
+        //         viewFormats     = &depth_texture_format,
+        //     }
+        //
+        //     depth_texture := wgpu.DeviceCreateTexture(device.device, &depth_texture_descriptor)
+        //
+        //     depth_texture_view_descriptor := wgpu.TextureViewDescriptor{
+        //         aspect          = .DepthOnly,
+        //         baseArrayLayer  = 0,
+        //         arrayLayerCount = 1,
+        //         baseMipLevel    = 0,
+        //         mipLevelCount   = 1,
+        //         dimension       = ._2D,
+        //         format          = depth_texture_format,
+        //     }
+        //
+        //     depth_texture_view := wgpu.TextureCreateView(depth_texture, &depth_texture_view_descriptor)
+        //
+        //     depth_stencil_attachment := wgpu.RenderPassDepthStencilAttachment{
+        //         view = depth_texture_view,
+        //         depthClearValue = 1.0,
+        //         depthLoadOp = .Clear,
+        //         depthStoreOp = .Store,
+        //         depthReadOnly = false,
+        //         stencilClearValue = 0,
+        //         stencilLoadOp = .Clear,
+        //         stencilStoreOp = .Store,
+        //         stencilReadOnly = true,
+        //     }
+        //
+        //     render_pass_descriptor := wgpu.RenderPassDescriptor{
+        //         depthStencilAttachment = &depth_stencil_attachment,
+        //     }
+        //
+        //     cmd_encoder_descriptor: wgpu.CommandEncoderDescriptor = { label = "Shadow command encoder" }
+        //     encoder: wgpu.CommandEncoder = wgpu.DeviceCreateCommandEncoder(device.device, &cmd_encoder_descriptor)
+        //
+        //     render_pass := wgpu.CommandEncoderBeginRenderPass(encoder, &render_pass_descriptor)
+        //
+        //     lights := get_lights()
+        //     // fast `if` statement for shaders
+        //     //condition = 0 or 1
+        //     //let color = (true_block_value) * condition + (1 - condition) * (else_block_value)
+        //
+        //     for l in lights {
+        //         if l.light_type != .Directional do continue
+        //     }
+        //
+        //     wgpu.RenderPassEncoderEnd(render_pass)
+        //     wgpu.RenderPassEncoderRelease(render_pass)
+        //
+        //     command_buffer_descriptor := wgpu.CommandBufferDescriptor{ label = "Shadow command buffer" }
+        //     command := wgpu.CommandEncoderFinish(encoder, &command_buffer_descriptor)
+        //
+        //     wgpu.RawQueueSubmit(device.queue, 1, &command)
+        //
+        //     wgpu.CommandBufferRelease(command)
+        //     wgpu.CommandEncoderRelease(encoder)
+        // }
+
+        //shadow_render_pass()
 
         view := window_get_fixed_aspect_viewport()
         wgpu.RenderPassEncoderSetScissorRect(render_pass, u32(view.x), u32(view.y), u32(view.w), u32(view.h))
@@ -108,7 +190,7 @@ app_update :: proc() {
         wgpu.TextureViewRelease(current_texture_view)
         // ===================================
 
-        command_buffer_descriptor := wgpu.CommandBufferDescriptor{ nextInChain = nil, label = "Draw command buffer" }
+        command_buffer_descriptor := wgpu.CommandBufferDescriptor{ label = "Draw command buffer" }
         command := wgpu.CommandEncoderFinish(encoder, &command_buffer_descriptor)
 
         wgpu.RawQueueSubmit(device.queue, 1, &command)

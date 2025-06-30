@@ -165,7 +165,7 @@ new_object :: proc(model_filepath: string, material: Material = Material{}, loc 
     if len(mat.normal_filepath) == 0 do mat.normal_filepath = "assets/models/1x1.png"
     if mat.texture_tilling == 0 do mat.texture_tilling = 1
 
-    label := concat_cstring({ "game object id: (", to_string(id), ") ubo" })
+    label := strings.concatenate({ "game object id: (", to_string(id), ") ubo" }, context.temp_allocator)
 
     model := new_model(id)
     model.filepath = model_filepath
@@ -181,12 +181,12 @@ new_object :: proc(model_filepath: string, material: Material = Material{}, loc 
     wgpu.QueueWriteBuffer(device.queue, model.ubo, 0, &model.ubo, size_of(ModelUbo))
     load_gltf(id)
 
-    label = concat_cstring({ "game object id: (", to_string(id), ") vertex buffer" })
+    label = strings.concatenate({ "game object id: (", to_string(id), ") vertex buffer" }, context.temp_allocator)
 
     model.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, model.vertex_buffer_size, label=label)
     wgpu.QueueWriteBuffer(device.queue, model.vertex_buffer, 0, &model.vertices[0], uint(model.vertex_buffer_size))
 
-    label = concat_cstring({ "game object id: (", to_string(id), ") index buffer" })
+    label = strings.concatenate({ "game object id: (", to_string(id), ") index buffer" }, context.temp_allocator)
 
     model.index_buffer = device_create_buffer({ .CopyDst, .Index }, model.index_buffer_size, label=label)
     wgpu.QueueWriteBuffer(device.queue, model.index_buffer, 0, &model.indices[0], uint(model.index_buffer_size))
@@ -212,7 +212,7 @@ go_create_bind_group :: proc(id: id_t, gui: ^GameObject, model: ^Model, diffuse_
     entries[3].sampler = diffuse_tex.sampler
 
     bind_group_descriptor := wgpu.BindGroupDescriptor{
-        label = concat_cstring({ "game object id: (", to_string(id), ") bind group" }),
+        label = strings.concatenate({ "game object id: (", to_string(id), ") bind group" }, context.temp_allocator),
         entryCount = len(entries),
         entries = &entries[0],
         layout = render_bind_group_layouts[1],
@@ -225,7 +225,7 @@ new_light_obj :: proc(light_type: LightType, color: vec4, loc := #caller_locatio
     obj := new_empty(loc=loc)
     light := new_light(obj.id, loc=loc)
 
-    light.light_type = u32(light_type)
+    light.light_type = light_type
     light.color = color
     light.direction = get_object_forward_dir(obj.id)
 
@@ -236,17 +236,11 @@ get_perspective_projection_matrix :: proc (fov_y, aspect, near, far: f32) -> mat
     tan_half_fov_y: f32 = math.tan((fov_y * math.RAD_PER_DEG) / 2)
 
     projection_matrix := mat4_zero
-    projection_matrix[0] = 1.0 / tan_half_fov_y
-    projection_matrix[5] = 1.0 / ((1.0 / aspect) * tan_half_fov_y)
-    projection_matrix[10] = far / (far - near)
-    projection_matrix[11] = 1.0
-    projection_matrix[14] = -(far * near) / (far - near)
-
-    // projection_matrix[0, 0] = 1.0 / tan_half_fov_y
-    // projection_matrix[1, 1] = 1.0 / ((1.0 / aspect) * tan_half_fov_y)
-    // projection_matrix[2, 2] = far / (far - near)
-    // projection_matrix[2, 3] = 1.0
-    // projection_matrix[3, 2] = -(far * near) / (far - near)
+    projection_matrix[0, 0] = 1.0 / (aspect * tan_half_fov_y)
+    projection_matrix[1, 1] = 1.0 / tan_half_fov_y
+    projection_matrix[2, 2] = far / (far - near)
+    projection_matrix[2, 3] = 1.0
+    projection_matrix[3, 2] = -(far * near) / (far - near)
 
     return projection_matrix
 }
@@ -254,19 +248,12 @@ get_perspective_projection_matrix :: proc (fov_y, aspect, near, far: f32) -> mat
 get_orthographic_projection :: proc (left, right, top, bottom, near, far: f32) -> mat4 {
     projection_matrix := mat4_identity
 
-    projection_matrix[0] = 2.0 / (right - left)
-    projection_matrix[5] = 2.0 / (bottom - top)
-    projection_matrix[10] = (far - near)
-    projection_matrix[11] = -near / (far - near)
-    projection_matrix[12] = -(right + left) / (right - left)
-    projection_matrix[13] = -(bottom + top) / (bottom - top)
-
-    // projection_matrix[0, 0] = 2.0 / (right - left)
-    // projection_matrix[1, 1] = 2.0 / (bottom - top)
-    // projection_matrix[2, 2] = (far - near)
-    // projection_matrix[2, 3] = -near / (far - near)
-    // projection_matrix[3, 0] = -(right + left) / (right - left)
-    // projection_matrix[3, 1] = -(bottom + top) / (bottom - top)
+    projection_matrix[0, 0] = 2.0 / (right - left)
+    projection_matrix[1, 1] = 2.0 / (bottom - top)
+    projection_matrix[2, 2] = far - near
+    projection_matrix[2, 3] = -near / (far - near)
+    projection_matrix[3, 0] = -(right + left) / (right - left)
+    projection_matrix[3, 1] = -(bottom + top) / (bottom - top)
 
     return projection_matrix
 }
@@ -286,60 +273,90 @@ get_view_yxz :: proc(position, rotation: vec3) -> struct { view: mat4, inverse_v
     view_matrix := mat4_identity
     inverse_view_matrix := mat4_identity
 
-    view_matrix[0] = u.x
-    view_matrix[4] = u.y
-    view_matrix[8] = u.z
-    view_matrix[1] = v.x
-    view_matrix[5] = v.y
-    view_matrix[9] = v.z
-    view_matrix[2] = w.x
-    view_matrix[6] = w.y
-    view_matrix[10] = w.z
-    view_matrix[12] = -lmath.dot(u, position)
-    view_matrix[13] = -lmath.dot(v, position)
-    view_matrix[14] = -lmath.dot(w, position)
+    view_matrix[0, 0] = u.x
+    view_matrix[0, 1] = v.x
+    view_matrix[0, 2] = w.x
 
-    inverse_view_matrix[0] = u.x
-    inverse_view_matrix[1] = u.y
-    inverse_view_matrix[2] = u.z
-    inverse_view_matrix[4] = v.x
-    inverse_view_matrix[5] = v.y
-    inverse_view_matrix[6] = v.z
-    inverse_view_matrix[8] = w.x
-    inverse_view_matrix[9] = w.y
-    inverse_view_matrix[10] = w.z
-    inverse_view_matrix[12] = position.x
-    inverse_view_matrix[13] = position.y
-    inverse_view_matrix[14] = position.z
+    view_matrix[1, 0] = u.y
+    view_matrix[1, 1] = v.y
+    view_matrix[1, 2] = w.y
 
-    // view_matrix[0, 0] = u.x
-    // view_matrix[1, 0] = u.y
-    // view_matrix[2, 0] = u.z
-    // view_matrix[0, 1] = v.x
-    // view_matrix[1, 1] = v.y
-    // view_matrix[2, 1] = v.z
-    // view_matrix[0, 2] = w.x
-    // view_matrix[1, 2] = w.y
-    // view_matrix[2, 2] = w.z
-    // view_matrix[3, 0] = -lmath.dot(u, position)
-    // view_matrix[3, 1] = -lmath.dot(v, position)
-    // view_matrix[3, 2] = -lmath.dot(w, position)
-    //
-    // inverse_view_matrix[0, 0] = u.x
-    // inverse_view_matrix[0, 1] = u.y
-    // inverse_view_matrix[0, 2] = u.z
-    // inverse_view_matrix[1, 0] = v.x
-    // inverse_view_matrix[1, 1] = v.y
-    // inverse_view_matrix[1, 2] = v.z
-    // inverse_view_matrix[2, 0] = w.x
-    // inverse_view_matrix[2, 1] = w.y
-    // inverse_view_matrix[2, 2] = w.z
-    // inverse_view_matrix[3, 0] = position.x
-    // inverse_view_matrix[3, 1] = position.y
-    // inverse_view_matrix[3, 2] = position.z
+    view_matrix[2, 0] = u.z
+    view_matrix[2, 1] = v.z
+    view_matrix[2, 2] = w.z
+
+    view_matrix[3, 0] = -lmath.dot(u, position)
+    view_matrix[3, 1] = -lmath.dot(v, position)
+    view_matrix[3, 2] = -lmath.dot(w, position)
+
+    inverse_view_matrix[0, 0] = u.x
+    inverse_view_matrix[0, 1] = u.y
+    inverse_view_matrix[0, 2] = u.z
+
+    inverse_view_matrix[1, 0] = v.x
+    inverse_view_matrix[1, 1] = v.y
+    inverse_view_matrix[1, 2] = v.z
+
+    inverse_view_matrix[2, 0] = w.x
+    inverse_view_matrix[2, 1] = w.y
+    inverse_view_matrix[2, 2] = w.z
+
+    inverse_view_matrix[3, 0] = position.x
+    inverse_view_matrix[3, 1] = position.y
+    inverse_view_matrix[3, 2] = position.z
 
     return { view_matrix, inverse_view_matrix }
 }
+
+// OLD CODE USING EULER ANGLES
+// update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> struct { model: mat4, normal: mat4 } {
+//     obj := get_game_obj(id, loc)
+//     if obj == nil { return { mat4_identity, mat4_identity } }
+//
+//     pos   := obj.position
+//     rot   := obj.rotation * math.RAD_PER_DEG
+//     scale := obj.scale
+//
+//     if is_2d {
+//         app_size := window_get_window_size()
+//         aspect := window_get_viewport_aspect()
+//
+//         pos = pos / vec3{app_size.x, app_size.y, 1}
+//         pos.x *= aspect
+//
+//         scale_tmp := scale.z
+//         scale /= app_size.x / aspect
+//         scale *= scale_tmp
+//
+//         rot.z = -rot.z
+//     }
+//
+//     c3: f32 = math.cos(rot.z)
+//     s3: f32 = math.sin(rot.z)
+//     c2: f32 = math.cos(rot.x)
+//     s2: f32 = math.sin(rot.x)
+//     c1: f32 = math.cos(rot.y)
+//     s1: f32 = math.sin(rot.y)
+//
+//     model_matrix: mat4 = {
+//         scale.x * (c1 * c3 + s1 * s2 * s3), scale.x * (c2 * s3), scale.x * (c1 * s2 * s3 - c3 * s1), 0.0,
+//         scale.y * (c3 * s1 * s2 - c1 * s3), scale.y * (c2 * c3), scale.y * (c1 * c3 * s2 + s1 * s3), 0.0,
+//         scale.z * (c2 * s1), scale.z * (-s2), scale.z * (c1 * c2), 0.0,
+//         pos.x, pos.y, pos.z, 1.0
+//     }
+//
+//     // normal matrix
+//     scale = 1.0 / scale
+//
+//     normal_matrix: mat4 = {
+//         scale.x * (c1 * c3 + s1 * s2 * s3), scale.x * (c2 * s3), scale.x * (c1 * s2 * s3 - c3 * s1), 0.0,
+//         scale.y * (c3 * s1 * s2 - c1 * s3), scale.y * (c2 * c3), scale.y * (c1 * c3 * s2 + s1 * s3), 0.0,
+//         scale.z * (c2 * s1),scale.z * (-s2), scale.z * (c1 * c2), 0.0,
+//         pos.x, pos.y, pos.z, 1.0
+//     }
+//
+//     return { model_matrix, normal_matrix }
+// }
 
 update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> struct { model: mat4, normal: mat4 } {
     obj := get_game_obj(id, loc)
@@ -363,27 +380,27 @@ update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> str
         rot.z = -rot.z
     }
 
-    c3: f32 = math.cos(rot.z)
-    s3: f32 = math.sin(rot.z)
-    c2: f32 = math.cos(rot.x)
-    s2: f32 = math.sin(rot.x)
-    c1: f32 = math.cos(rot.y)
-    s1: f32 = math.sin(rot.y)
+    quat :quat
+    if obj.using_quat {
+        quat = obj.quat
+    } else {
+        quat = vec3_to_quat(rot)
+    }
+
+    rot_mat := quat_to_mat4(quat)
 
     model_matrix: mat4 = {
-        scale.x * (c1 * c3 + s1 * s2 * s3), scale.x * (c2 * s3), scale.x * (c1 * s2 * s3 - c3 * s1), 0.0,
-        scale.y * (c3 * s1 * s2 - c1 * s3), scale.y * (c2 * c3), scale.y * (c1 * c3 * s2 + s1 * s3), 0.0,
-        scale.z * (c2 * s1), scale.z * (-s2), scale.z * (c1 * c2), 0.0,
+        rot_mat[0, 0] * scale.x, rot_mat[0, 1] * scale.x, rot_mat[0, 2] * scale.x, 0.0,
+        rot_mat[1, 0] * scale.y, rot_mat[1, 1] * scale.y, rot_mat[1, 2] * scale.y, 0.0,
+        rot_mat[2, 0] * scale.z, rot_mat[2, 1] * scale.z, rot_mat[2, 2] * scale.z, 0.0,
         pos.x, pos.y, pos.z, 1.0
     }
 
-    // normal matrix
     scale = 1.0 / scale
-
     normal_matrix: mat4 = {
-        scale.x * (c1 * c3 + s1 * s2 * s3), scale.x * (c2 * s3), scale.x * (c1 * s2 * s3 - c3 * s1), 0.0,
-        scale.y * (c3 * s1 * s2 - c1 * s3), scale.y * (c2 * c3), scale.y * (c1 * c3 * s2 + s1 * s3), 0.0,
-        scale.z * (c2 * s1),scale.z * (-s2), scale.z * (c1 * c2), 0.0,
+        rot_mat[0, 0] * scale.x, rot_mat[0, 1] * scale.x, rot_mat[0, 2] * scale.x, 0.0,
+        rot_mat[1, 0] * scale.y, rot_mat[1, 1] * scale.y, rot_mat[1, 2] * scale.y, 0.0,
+        rot_mat[2, 0] * scale.z, rot_mat[2, 1] * scale.z, rot_mat[2, 2] * scale.z, 0.0,
         pos.x, pos.y, pos.z, 1.0
     }
 
@@ -392,20 +409,17 @@ update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> str
 
 get_object_forward_dir :: proc(obj_id: id_t) -> vec3 {
     mats := update_matrix(obj_id)
-    return vec3{ mats.model[8], mats.model[9], mats.model[10] }
-    // return vec3{ mats.model[2, 0], mats.model[2, 1], mats.model[2, 2] }
+    return lmath.normalize(vec3{ mats.model[2, 0], mats.model[2, 1], mats.model[2, 2] })
 }
 
 get_object_right_dir :: proc(obj_id: id_t) -> vec3 {
     mats := update_matrix(obj_id)
-    return vec3{ mats.model[0], mats.model[1], mats.model[2] }
-    // return vec3{ mats.model[0, 0], mats.model[0, 1], mats.model[0, 2] }
+    return lmath.normalize(vec3{ mats.model[0, 0], mats.model[0, 1], mats.model[0, 2] })
 }
 
 get_object_up_dir :: proc(obj_id: id_t) -> vec3 {
     mats := update_matrix(obj_id)
-    return vec3{ mats.model[4], mats.model[5], mats.model[6] }
-    // return vec3{ mats.model[1, 0], mats.model[1, 1], mats.model[1, 2] }
+    return lmath.normalize(vec3{ mats.model[1, 0], mats.model[1, 1], mats.model[1, 2] })
 }
 
 set_scale :: proc(obj_id: id_t, scale: vec3) {
@@ -602,7 +616,7 @@ create_texture :: proc(id: id_t, texture_format: wgpu.TextureFormat, data: [^]u8
     }
     texture.texture = wgpu.DeviceCreateTexture(device.device, &texture_descriptor)
 
-    destination := wgpu.ImageCopyTexture{
+    destination := wgpu.TexelCopyTextureInfo{
         texture = texture.texture,
         mipLevel = 0,
         origin = { 0, 0, 0 },
@@ -615,7 +629,7 @@ create_texture :: proc(id: id_t, texture_format: wgpu.TextureFormat, data: [^]u8
 
     image_size := uint(texture.width * texture.height * channel_count)
 
-    source := wgpu.TextureDataLayout{
+    source := wgpu.TexelCopyBufferLayout{
         offset = 0,
         bytesPerRow = texture_descriptor.size.width * channel_count,
         rowsPerImage = texture_descriptor.size.height,
@@ -742,7 +756,6 @@ create_cube_texture_image :: proc(id: id_t, filepaths: [6]string, loc := #caller
         if wd.error do return
     }
 
-
     width, height, _ := work_data[0].width, work_data[0].height, work_data[0].channel
 
     texture.width = u32(width)
@@ -769,13 +782,13 @@ create_cube_texture_image :: proc(id: id_t, filepaths: [6]string, loc := #caller
     texture_descriptor.viewFormats = nil
     texture.texture = wgpu.DeviceCreateTexture(device.device, &texture_descriptor)
 
-    destination: wgpu.ImageCopyTexture
+    destination: wgpu.TexelCopyTextureInfo
     destination.texture = texture.texture
     destination.mipLevel = 0
     destination.origin = { 0, 0, 0 }
     destination.aspect = .All
 
-    source: wgpu.TextureDataLayout
+    source: wgpu.TexelCopyBufferLayout
     source.offset = 0
     source.bytesPerRow = texture_descriptor.size.width * 4
     source.rowsPerImage = texture_descriptor.size.height
@@ -883,7 +896,6 @@ async_set_textures :: proc() {
         pop(&async_textures)
     }
 }
-
 
 // TODO: set more than one texture, eg: diff, normal, spec...
 set_texture :: proc(id: id_t, filepath: string, loc:=#caller_location) {

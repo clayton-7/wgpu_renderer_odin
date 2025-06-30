@@ -5,6 +5,7 @@ import "vendor:glfw"
 import tt "vendor:stb/truetype"
 import "base:runtime"
 import "core:sort"
+import "core:math"
 
 // GLOBALS ===================================================
 window : glfw.WindowHandle = nil
@@ -19,6 +20,7 @@ id_t :: distinct u128
 vec2 :: distinct [2]f32
 vec3 :: distinct [3]f32
 vec4 :: distinct [4]f32
+quat :: distinct [4]f32
 
 vec2i32 :: distinct [2]i32
 vec3i32 :: distinct [3]i32
@@ -41,13 +43,9 @@ vec4f64 :: distinct [4]f64
 vec_3 :: proc{ _vec_3a, _vec_3b }
 vec_4 :: proc{ _vec_4a, _vec_4b, _vec_4c, _vec_4d }
 
-// mat2 :: distinct matrix [2, 2]f32
-// mat3 :: distinct matrix [3, 3]f32
-// mat4 :: distinct matrix [4, 4]f32
-
-mat2 :: distinct [4]f32
-mat3 :: distinct [9]f32
-mat4 :: distinct [16]f32
+mat2 :: distinct #row_major matrix [2, 2]f32
+mat3 :: distinct #row_major matrix [3, 3]f32
+mat4 :: distinct #row_major matrix [4, 4]f32
 
 mat2f64 :: distinct [4]f64
 mat3f64 :: distinct [9]f64
@@ -82,6 +80,8 @@ vec4_back :: vec4{ 0, 0, -1, 0 }
 vec2_down :: vec2{ 0, -1 }
 vec3_down :: vec3{ 0, -1, 0 }
 vec4_down :: vec4{ 0, -1, 0, 0 }
+
+quat_identity :: quat{ 0, 0, 0, 1 }
 
 mat2_identity :: mat2{ 1, 0, 0, 1 }
 mat3_identity :: mat3{ 1, 0, 0, 0, 1, 0, 0, 0, 1 }
@@ -129,6 +129,101 @@ mat2f64_zero :: mat2f64{}
 mat3f64_zero :: mat3f64{}
 mat4f64_zero :: mat4f64{}
 
+quat_to_mat4 :: proc(q: quat) -> mat4 {
+    x, y, z, w := q.x, q.y, q.z, q.w
+
+    m00 := 1 - 2 * y * y - 2 * z * z
+    m01 := 2 * x * y + 2 * z * w
+    m02 := 2 * x * z - 2 * y * w
+
+    m10 := 2 * x * y - 2 * z * w
+    m11 := 1 - 2 * x * x - 2 * z * z
+    m12 := 2 * y * z + 2 * x * w
+
+    m20 := 2 * x * z + 2 * y * w
+    m21 := 2 * y * z - 2 * x * w
+    m22 := 1 - 2 * x * x - 2 * y * y
+
+    return mat4{
+        m00, m01, m02, 0,
+        m10, m11, m12, 0,
+        m20, m21, m22, 0,
+        0,   0,   0,   1,
+    }
+}
+
+quat_to_mat3 :: proc(q: quat) -> mat3 {
+    x, y, z, w := q.x, q.y, q.z, q.w
+
+    m00 := 1 - 2 * y * y - 2 * z * z
+    m01 := 2 * x * y + 2 * z * w
+
+    m10 := 2 * x * y - 2 * z * w
+    m11 := 1 - 2 * x * x - 2 * z * z
+
+    return mat3{
+        m00, m01,  0,
+        m10, m11,  0,
+        0,   0,    1
+    }
+}
+
+vec3_to_quat :: proc(v: vec3) -> quat {
+    cr := math.cos(v.x * 0.5)
+    sr := math.sin(v.x * 0.5)
+    cp := math.cos(v.y * 0.5)
+    sp := math.sin(v.y * 0.5)
+    cy := math.cos(v.z * 0.5)
+    sy := math.sin(v.z * 0.5)
+
+    return quat{
+        (sr * cp * cy) - (cr * sp * sy),
+        (cr * sp * cy) + (sr * cp * sy),
+        (cr * cp * sy) - (sr * sp * cy),
+        (cr * cp * cy) + (sr * sp * sy),
+    }
+}
+
+quat_to_vec3 :: proc(q: quat) -> vec3 {
+    return vec3{
+        math.atan2(2 * (q.x * q.y + q.w * q.z), 1 - 2 * (q.y * q.y + q.z * q.z)),
+        math.asin(2 * (q.x * q.z - q.w * q.y)),
+        math.atan2(2 * (q.x * q.y - q.w * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)),
+    }
+}
+
+
+vec3_to_mat3 :: proc(v: vec3) -> mat3 {
+    c1 := math.cos(-v.x)
+    c2 := math.cos(-v.y)
+    c3 := math.cos(-v.z)
+    s1 := math.sin(-v.x)
+    s2 := math.sin(-v.y)
+    s3 := math.sin(-v.z)
+
+    m: mat3
+    m[0, 0] = c2 * c3
+    m[1, 0] =-c1 * s3 + s1 * s2 * c3
+    m[2, 0] = s1 * s3 + c1 * s2 * c3
+    m[0, 1] = c2 * s3
+    m[1, 1] = c1 * c3 + s1 * s2 * s3
+    m[2, 1] =-s1 * c3 + c1 * s2 * s3
+    m[0, 2] =-s2
+    m[1, 2] = s1 * c2
+    m[2, 2] = c1 * c2
+    return m
+}
+
+mat3_to_vec3 :: proc(m: mat3) -> vec3 {
+    T1 := math.atan2(m[1, 2], m[2, 2])
+    C2 := math.sqrt(m[0, 0]*m[0, 0] + m[0, 1]*m[0, 1])
+    T2 := math.atan2(-m[0, 2], C2)
+    S1 := math.sin(T1)
+    C1 := math.cos(T1)
+    T3 := math.atan2(S1*m[2, 0] - C1*m[1, 0], C1*m[1, 1] - S1*m[2, 1])
+    return vec3{ -T1, -T2, -T3 }
+}
+
 ModelMaterial :: struct #packed {
     diffuse:         vec3,
     pad1:            f32,
@@ -150,16 +245,16 @@ ModelUbo :: struct {
 }
 
 LightType :: enum(u32) {
-    DirectionalLight = 0,
-    PointLight       = 1,
-    SpotLight        = 2,
+    Directional = 0,
+    Point       = 1,
+    Spot        = 2,
 }
 
 Light :: struct {
     color:      vec4,
     direction:  vec3,
     position:   vec3,
-    light_type: u32,
+    light_type: LightType ,
     pad:        [12]u8
 }
 
@@ -189,7 +284,7 @@ Pipeline :: struct {
     vertex_attributes:             [2]wgpu.VertexAttribute,
     vertex_buffer_layout:          wgpu.VertexBufferLayout,
     pipeline_descriptor:           wgpu.RenderPipelineDescriptor,
-    shader_code_descriptor:        wgpu.ShaderModuleWGSLDescriptor,
+    shader_code_descriptor:        wgpu.ShaderSourceWGSL,
     shader_descriptor:             wgpu.ShaderModuleDescriptor,
     shader_module:                 wgpu.ShaderModule,
     fragment_state:                wgpu.FragmentState,
@@ -337,6 +432,8 @@ GameObject :: struct {
     id:        id_t,
     position:  vec3,
     rotation:  vec3,
+    quat:      quat,
+    using_quat: bool,
     scale:     vec3,
     parent:    id_t,
     childs:    [dynamic]id_t,

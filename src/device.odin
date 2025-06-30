@@ -15,36 +15,35 @@ device_init :: proc() {
     }
 
     device.surface = window_get_surface(instance)
-    wgpu.InstanceRequestAdapter(instance, &adapter_options, on_adapter, nil)
+    wgpu.InstanceRequestAdapter(instance, &adapter_options, { callback = on_adapter })
 
-    on_adapter :: proc "c" (status: wgpu.RequestAdapterStatus, adapter: wgpu.Adapter, message: cstring, userdata: rawptr) {
+    on_adapter :: proc "c" (status: wgpu.RequestAdapterStatus, adapter: wgpu.Adapter, message: wgpu.StringView, userdata1: rawptr, userdata2: rawptr) {
+    // on_adapter :: proc "c" (status: wgpu.RequestAdapterStatus, adapter: wgpu.Adapter, message: cstring, userdata: rawptr) {
         context = ctx
         if status != .Success || adapter == nil {
             FATALF("request adapter failure: %v, %v", status, message, disable_location = true)
         }
 
         device.adapter = adapter
+        wgpu.AdapterRequestDevice(adapter, nil, { callback = on_device })
     }
 
-    wgpu.AdapterRequestDevice(device.adapter, nil, on_device)
-
-    on_device :: proc "c" (status: wgpu.RequestDeviceStatus, _device: wgpu.Device, message: cstring, userdata: rawptr) {
+    on_device :: proc "c" (status: wgpu.RequestDeviceStatus, _device: wgpu.Device, message: string, userdata1: rawptr, userdata2: rawptr) {
         context = ctx
         if status != .Success || _device == nil {
             FATALF("request device failure: %v, %v", status, message, disable_location = true)
         }
 
         device.device = _device
+        device.queue = wgpu.DeviceGetQueue(device.device)
+        device_create_surface_textures(window_get_size())
     }
-
-    device.queue = wgpu.DeviceGetQueue(device.device)
-    device_create_surface_textures(window_get_size())
 }
 
 device_destroy :: proc() {
 }
 
-device_create_buffer :: proc(usage_flags: wgpu.BufferUsageFlags, size: u64, mapped_at_creation: bool = false, label: cstring = "") -> wgpu.Buffer {
+device_create_buffer :: proc(usage_flags: wgpu.BufferUsageFlags, size: u64, mapped_at_creation: bool = false, label: string = "") -> wgpu.Buffer {
     return wgpu.DeviceCreateBuffer(device.device, &wgpu.BufferDescriptor{
         label = label,
         size  = next_pow2(size),
@@ -119,13 +118,12 @@ device_create_surface_textures :: proc(size: vec2) {
 }
 
 device_get_default_pipeline :: proc(pipeline: ^Pipeline) {
-    buf := read_file_to_cstring(pipeline.shader_filepath)
+    buf := read_file_to_string(pipeline.shader_filepath)
     defer delete(buf)
 
-    pipeline.shader_code_descriptor.chain.sType = .ShaderModuleWGSLDescriptor
+    pipeline.shader_code_descriptor.chain.sType = .ShaderSourceWGSL
     pipeline.shader_code_descriptor.code = buf
 
-    pipeline.shader_descriptor.hintCount = 0
     pipeline.shader_descriptor.nextInChain = &pipeline.shader_code_descriptor.chain
     pipeline.shader_module = wgpu.DeviceCreateShaderModule(device.device, &pipeline.shader_descriptor)
 
@@ -165,7 +163,7 @@ device_get_default_pipeline :: proc(pipeline: ^Pipeline) {
 
     pipeline.depth_texture_format = .Depth24Plus
     pipeline.depth_stencil_state.format = .Depth24Plus
-    pipeline.depth_stencil_state.depthWriteEnabled = true
+    pipeline.depth_stencil_state.depthWriteEnabled = .True
     pipeline.depth_stencil_state.depthCompare = .Less
     pipeline.depth_stencil_state.stencilReadMask = 0
     pipeline.depth_stencil_state.stencilWriteMask = 0
