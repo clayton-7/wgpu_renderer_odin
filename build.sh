@@ -4,12 +4,6 @@ BIN_NAME=force
 SOURCE_PATH=src
 DEBUG_FLAG="-debug -vet-unused-imports -vet-shadowing -vet-using-stmt -vet-using-param -vet-cast -warnings-as-errors -use-separate-modules"
 
-# RUN
-if [ -n "$1" ] && [ "$1" = "run" ]; then
-    ./$BIN_NAME
-    exit 0
-fi
-
 [ -f "error.log" ] && rm "error.log"
 
 # DEBUG MODE
@@ -28,5 +22,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-rm "error.log"
+# RUN
+if [ -n "$1" ] && [ "$1" = "run" ]; then
+    ./$BIN_NAME
+fi
+
 exit 0

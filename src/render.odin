@@ -197,6 +197,7 @@ render_begin_render_pass :: proc(next_texture: wgpu.TextureView, encoder: wgpu.C
     // RENDER PASS IMAGE VIEW
     render_pass_color_attachment := wgpu.RenderPassColorAttachment{
         view = next_texture,
+        depthSlice = wgpu.DEPTH_SLICE_UNDEFINED,
         loadOp = .Clear,
         storeOp = .Store,
         clearValue = { clear_color.r, clear_color.g, clear_color.b, clear_color.a }

@@ -49,34 +49,36 @@ logger_destroy :: proc() {
     }
 }
 
-@(private="file") _read_file :: proc(file_path: string, allocator: runtime.Allocator, loc := #caller_location) -> ([^]u8, int) {
-    u8_buffer, ok := os.read_entire_file_from_filename(file_path, context.temp_allocator, loc)
+read_file_to_cstring :: proc(filepath: string, allocator := context.allocator, loc := #caller_location) -> cstring {
+    buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
 
-    if !ok {
-        ERRORF("Failed to read the file:", file_path, loc=loc)
-        return &u8_buffer[0], 0
+    if err != nil {
+        ERRORF("Failed to read the file:", filepath, loc=loc)
+        return {}
     }
 
-    _len := len(u8_buffer)
-    c_buffer := make([]byte, _len + 1, allocator, loc)
-    copy(c_buffer, u8_buffer)
-    c_buffer[len(u8_buffer)] = 0
-
-    return &c_buffer[0], _len
-}
-
-read_file_to_cstring :: proc(file_path: string, allocator := context.allocator, loc := #caller_location) -> cstring {
-    buffer, _ := _read_file(file_path, allocator, loc=loc)
     return cstring(&buffer[0])
 }
 
-read_file_to_string :: proc(file_path: string, allocator := context.allocator, loc := #caller_location) -> string {
-    buffer, _len := _read_file(file_path, allocator, loc=loc)
-    return strings.string_from_ptr(buffer, _len)
+read_file_to_string :: proc(filepath: string, allocator := context.allocator, loc := #caller_location) -> string {
+    buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
+
+    if err != nil {
+        ERRORF("Failed to read the file:", filepath, loc=loc)
+        return {}
+    }
+
+    return strings.string_from_ptr(&buffer[0], len(buffer))
 }
 
-read_file_to_u8 :: proc(file_path: string, allocator := context.allocator, loc := #caller_location) -> [^]u8 {
-    buffer, _ := _read_file(file_path, allocator, loc=loc)
+read_file_to_u8 :: proc(filepath: string, allocator := context.allocator, loc := #caller_location) -> [^]u8 {
+    buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
+
+    if err != nil {
+        ERRORF("Failed to read the file:", filepath, loc=loc)
+        return {}
+    }
+
     return &buffer[0]
 }
 
@@ -91,12 +93,13 @@ print :: proc(msg: any, level := LOG.DEBUG, new_line := true, loc := #caller_loc
         file := loc.file_path
         colors := COLORS
         levels := LEVELS
-        // FIX: os.get_current_directory() breaks if the print func is called by c code because it does not use context allocator
-        // if !LOG_FULL_PATH {
-        //     dir := os.get_current_directory()
-        //     dir = fmt.tprintf("%v/", dir)
-        //     file, _ = strings.remove(loc.file_path, dir, 1)
-        // }
+        if !LOG_FULL_PATH {
+            dir, err := os.get_executable_directory(context.temp_allocator)
+            if err == nil {
+                dir = fmt.tprintf("%v/", dir)
+                file, _ = strings.remove(loc.file_path, dir, 1, allocator = context.temp_allocator)
+            }
+        }
 
         format := ""
         if disable_location {

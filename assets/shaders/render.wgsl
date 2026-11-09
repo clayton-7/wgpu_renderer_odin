@@ -210,12 +210,12 @@ fn reinhardExtendedLuminance(v: vec3f, maxWhiteL: f32) -> vec3f {
     return v * (l_new / luminance(v));
 }
 
-fn clamp(value: f32, min: f32, max: f32) -> f32 {
-    return min(max(value, min), max);
+fn clamp(value: f32, _min: f32, _max: f32) -> f32 {
+    return min(max(value, _min), _max);
 }
 
-fn clamp_vec3(value: vec3f, min: f32, max: f32) -> vec3f {
-    return vec3f(clamp(value.x, min, max), clamp(value.y, min, max), clamp(value.z, min, max));
+fn clamp_vec3(value: vec3f, _min: f32, _max: f32) -> vec3f {
+    return vec3f(clamp(value.x, _min, _max), clamp(value.y, _min, _max), clamp(value.z, _min, _max));
 }
 
 fn aces_narkowicz(value: vec3f) -> vec3f {

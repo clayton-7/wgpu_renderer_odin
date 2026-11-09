@@ -79,8 +79,15 @@ app_update :: proc() {
         defer wgpu.TextureRelease(surface_texture.texture)
 
         switch surface_texture.status {
+            // TODO: reconfigure surface case `SuccessSuboptimal`
             case .SuccessOptimal, .SuccessSuboptimal:
+            // case .SuccessSuboptimal:
+            //     wgpu.SurfaceConfigure(device.surface, {})
 
+            case .Occluded: continue // the window is minimized or behind another window
+
+            // TODO: use wgpu.SurfaceConfigure for Outdated
+            // Outdated: The underlying surface has changed, and therefore the surface configuration is outdated.
             case .Timeout, .Outdated, .Lost:
                 INFOF("Cannot acquire the current render texture, status: %v\n", enum_to_string(surface_texture.status))
 
@@ -90,7 +97,7 @@ app_update :: proc() {
                 app_resize(window, i32(WIN_SIZE.x), i32(WIN_SIZE.y))
                 return
 
-            case .OutOfMemory, .DeviceLost, .Error:
+            case .Error:
                 FATALF("Fatal error on the current render texture, status: %v\n", enum_to_string(surface_texture.status))
         }
 
@@ -104,78 +111,6 @@ app_update :: proc() {
 
         current_texture_view := wgpu.TextureCreateView(surface_texture.texture, &tex_view_desc)
         render_pass: wgpu.RenderPassEncoder = render_begin_render_pass(current_texture_view, encoder, vec4f64_zero)
-
-        // shadow_render_pass :: proc() {
-        //     depth_texture_format: wgpu.TextureFormat = .Depth24Plus
-        //
-        //     depth_texture_descriptor := wgpu.TextureDescriptor{
-        //         dimension       = ._2D,
-        //         format          = depth_texture_format,
-        //         mipLevelCount   = 1,
-        //         sampleCount     = 1,
-        //         size            = { 2048, 2048, 1 },
-        //         usage           = { .RenderAttachment },
-        //         viewFormatCount = 1,
-        //         viewFormats     = &depth_texture_format,
-        //     }
-        //
-        //     depth_texture := wgpu.DeviceCreateTexture(device.device, &depth_texture_descriptor)
-        //
-        //     depth_texture_view_descriptor := wgpu.TextureViewDescriptor{
-        //         aspect          = .DepthOnly,
-        //         baseArrayLayer  = 0,
-        //         arrayLayerCount = 1,
-        //         baseMipLevel    = 0,
-        //         mipLevelCount   = 1,
-        //         dimension       = ._2D,
-        //         format          = depth_texture_format,
-        //     }
-        //
-        //     depth_texture_view := wgpu.TextureCreateView(depth_texture, &depth_texture_view_descriptor)
-        //
-        //     depth_stencil_attachment := wgpu.RenderPassDepthStencilAttachment{
-        //         view = depth_texture_view,
-        //         depthClearValue = 1.0,
-        //         depthLoadOp = .Clear,
-        //         depthStoreOp = .Store,
-        //         depthReadOnly = false,
-        //         stencilClearValue = 0,
-        //         stencilLoadOp = .Clear,
-        //         stencilStoreOp = .Store,
-        //         stencilReadOnly = true,
-        //     }
-        //
-        //     render_pass_descriptor := wgpu.RenderPassDescriptor{
-        //         depthStencilAttachment = &depth_stencil_attachment,
-        //     }
-        //
-        //     cmd_encoder_descriptor: wgpu.CommandEncoderDescriptor = { label = "Shadow command encoder" }
-        //     encoder: wgpu.CommandEncoder = wgpu.DeviceCreateCommandEncoder(device.device, &cmd_encoder_descriptor)
-        //
-        //     render_pass := wgpu.CommandEncoderBeginRenderPass(encoder, &render_pass_descriptor)
-        //
-        //     lights := get_lights()
-        //     // fast `if` statement for shaders
-        //     //condition = 0 or 1
-        //     //let color = (true_block_value) * condition + (1 - condition) * (else_block_value)
-        //
-        //     for l in lights {
-        //         if l.light_type != .Directional do continue
-        //     }
-        //
-        //     wgpu.RenderPassEncoderEnd(render_pass)
-        //     wgpu.RenderPassEncoderRelease(render_pass)
-        //
-        //     command_buffer_descriptor := wgpu.CommandBufferDescriptor{ label = "Shadow command buffer" }
-        //     command := wgpu.CommandEncoderFinish(encoder, &command_buffer_descriptor)
-        //
-        //     wgpu.RawQueueSubmit(device.queue, 1, &command)
-        //
-        //     wgpu.CommandBufferRelease(command)
-        //     wgpu.CommandEncoderRelease(encoder)
-        // }
-
-        //shadow_render_pass()
 
         view := window_get_fixed_aspect_viewport()
         wgpu.RenderPassEncoderSetScissorRect(render_pass, u32(view.x), u32(view.y), u32(view.w), u32(view.h))

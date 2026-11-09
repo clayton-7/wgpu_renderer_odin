@@ -434,18 +434,16 @@ load_gltf :: proc(id: id_t, loc := #caller_location) {
     model := get_model(id)
     filepath := model.filepath
 
-    json_data_file, success := os.read_entire_file_from_filename(filepath)
-    defer delete(json_data_file)
+    buffer, err := os.read_entire_file_from_path(filepath, context.temp_allocator)
 
-    if !success {
+    if err != nil {
         ERRORF("Cannot load model: %s\n", filepath, loc = loc)
         return
     }
 
-    data, err := json.parse(json_data_file)
-    defer json.destroy_value(data)
+    data, errr := json.parse_bytes(buffer, allocator = context.temp_allocator)
 
-    if err != .None {
+    if errr != .None {
         ERRORF("Cannot load model: %s, error: %v\n", filepath, err, loc = loc)
         return
     }
@@ -483,11 +481,9 @@ load_gltf :: proc(id: id_t, loc := #caller_location) {
         return
     }
 
-    binary_data: []u8
-    binary_data, success = os.read_entire_file_from_filename(binary_filepath)
-    defer delete(binary_data)
+    binary_data, errrr := os.read_entire_file_from_path(binary_filepath, context.temp_allocator, loc)
 
-    if !success {
+    if errrr != nil {
         ERRORF("Cannot load model binary: %s\n", binary_filepath, loc = loc)
         return
     }

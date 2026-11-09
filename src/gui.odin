@@ -635,8 +635,9 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
     atlas.filepath = filepath
     atlas.padding = padding
 
-    // Load the font file
-    font_data := read_file_to_u8(filepath, allocator=context.temp_allocator)
+    font_data := read_file_to_u8(filepath)
+    defer free(font_data)
+
     if font_data == nil {
         ERROR("Failed to read font file.", loc=loc)
         return obj
@@ -652,13 +653,12 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
     atlas.size.x = 1024
     atlas.size.y = 1024
 
-    atlas.data = make([^]byte, int(atlas.size.x * atlas.size.y))
+    atlas.data = make([^]byte, int(atlas.size.x * atlas.size.y), allocator=context.allocator)
     // HACK: this should be a map because languages like japanese, chinese has an index too big to do in this way
-    atlas.glyphs = make([]FontGlyph, int(end_idx - begin_idx))
+    atlas.glyphs = make([]FontGlyph, int(end_idx - begin_idx), allocator=context.allocator)
 
     //----------------------------------------------------------------------------
-
-    atlas.font_info = new(tt.fontinfo)
+    atlas.font_info = new(tt.fontinfo, allocator=context.allocator)
     if !tt.InitFont(atlas.font_info, &font_data[0], 0) {
         ERRORF("Failed to initialize the font: %v", filepath)
         return obj
