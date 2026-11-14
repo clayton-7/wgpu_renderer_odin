@@ -145,23 +145,25 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
         go := get_game_obj(id)
         if !go.enabled do continue
 
-        original_transform := []f32{ go.position.x, go.position.y, go.position.z, go.rotation.x, go.rotation.y, go.rotation.z, go.scale.z }
+        original_position := go.position
+        original_rotation := go.rotation
+        original_scale_z  := go.scale.z
 
         if go.parent != INVALID_ID {
             parent := get_game_obj(go.parent)
             go.position += parent.position
-            go.rotation += parent.rotation
+            go.rotation = parent.rotation * go.rotation
             go.scale.z *= parent.scale.z
         }
 
         go.position.z = 0
         model_matrix := update_matrix(id, is_2d = true).model
-        go.position.z = original_transform[2]
+        go.position.z = original_position.z
 
         if go.parent != INVALID_ID {
-            go.position = vec3{ original_transform[0], original_transform[1], original_transform[2] }
-            go.rotation = vec3{ original_transform[3], original_transform[4], original_transform[5] }
-            go.scale.z = original_transform[6]
+            go.position = original_position
+            go.rotation = original_rotation
+            go.scale.z = original_scale_z
         }
 
         is_font : u32 = 0
@@ -407,7 +409,7 @@ is_mouse_on_gui :: proc(obj: ^GameObject) -> bool {
     pos := vec2{ obj.position.x , obj.position.y }
 
     size := obj.scale * obj.scale.z
-    rot := -obj.rotation.z
+    rot := -get_rotation_euler(obj.id).z
 
     // points
     corners[0] = vec2{ -size.x,  size.y } // tl

@@ -18,6 +18,7 @@ odin build $SOURCE_PATH $DEBUG_FLAG -out:$BIN_NAME 2> error.log
 
 if [ $? -ne 0 ]; then
     echo "Build failed."
+    cat error.log
     sed -i 's/^||/  /' error.log
     exit 1
 fi

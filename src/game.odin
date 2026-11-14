@@ -3,6 +3,7 @@ package main
 import math "core:math/linalg"
 // import mu "vendor:microui"
 import "core:fmt"
+import box "vendor:box3d"
 
 crosshair: ^GameObject
 rotate_cube: ^GameObject
@@ -11,16 +12,21 @@ test_gui: ^GameObject
 font: ^GameObject
 fps_txt: ^GameObject
 cube1: ^GameObject
+cube1_body_id: box.BodyId
 ground: ^GameObject
+
+world_id: box.WorldId
 
 mouse_speed :: 0.5
 cam_speed: f32 = 12.0
 acc: f32 = 0
 cube_speed: f32 = 1
 last_pos: vec2
+cam_euler: vec3
 
 game_init :: proc(camera: ^GameObject) {
     cam = camera
+    cam_euler = get_rotation_euler(cam.id)
     window_enable_cursor(false)
 
     mat := Material{
@@ -30,9 +36,9 @@ game_init :: proc(camera: ^GameObject) {
         texture_tilling = 2,
     }
 
-    crosshair = gui_create_quad(color = vec4{ 0, 1, 0, 1 })
-    crosshair.scale.xy = 6
-    gui_set_render_index(crosshair.id, 999)
+    // crosshair = gui_create_quad(color = vec4{ 0, 1, 0, 1 })
+    // crosshair.scale.xy = 6
+    // gui_set_render_index(crosshair.id, 999)
 
     mat.diffuse_filepath = "assets/models/brick.jpg"
     mat.normal_filepath = "assets/models/brick_normal.jpg"
@@ -49,20 +55,19 @@ game_init :: proc(camera: ^GameObject) {
     cube1 = new_object("assets/models/cube.gltf")
     cube1.position.x = -2.5
     cube1.position.y = 5.5
-    cube1.rotation.z = 22
-    cube1.quat = vec3_to_quat(vec3{ 40, 0, 0 })
+    cube1.rotation = vec3_to_quat(vec3{ 45, 45, 45 })
 
     mat.diffuse_filepath = "assets/models/c.png"
     mat.normal_filepath = "assets/models/cn.png"
     mat.texture_tilling = 62
 
-    ground = new_object("assets/models/plane.gltf", mat)
-    ground.position.y = -1
-    ground.rotation.x = 0
-    ground.scale.xyz = 100
+    ground = new_object("assets/models/cube.gltf", mat)
+    ground.scale.xz = 100
+    ground.scale.y= 0.100
+    ground.position.y = -2
 
     light := new_light_obj(.Directional, { 1, 1, 1, 1 })
-    light.rotation.x = 45
+    set_rotation_euler(light.id, { 45, 0, 0 })
 
     test_gui = gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
         g := get_gui(event.id)
@@ -117,6 +122,35 @@ game_init :: proc(camera: ^GameObject) {
     gui_set_render_index(fps_txt.id, 2)
 
     set_parent(fps_bg.id, fps_txt.id)
+
+    //000++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    world_def := box.DefaultWorldDef()
+    world_def.gravity = { 0, -9.8, 0 }
+    world_id = box.CreateWorld(world_def)
+
+    ground_body_def := box.DefaultBodyDef()
+    ground_body_def.position = ground.position.xyz
+    ground_id := box.CreateBody(world_id, ground_body_def)
+
+    ground_box := box.MakeBoxHull(ground.scale.x, ground.scale.y, ground.scale.z)
+    ground_shape_def := box.DefaultShapeDef()
+    _ = box.CreateHullShape(ground_id, ground_shape_def, &ground_box.base)
+
+    cube_def := box.DefaultBodyDef()
+    cube_def.type = .dynamicBody
+
+    cube_def.position = cube1.position.xyz
+    cube_def.rotation = cube1.rotation
+
+    cube1_body_id = box.CreateBody(world_id, cube_def)
+
+    dynamic_box := box.MakeBoxHull(cube1.scale.x, cube1.scale.y, cube1.scale.z)
+    shape_def := box.DefaultShapeDef()
+    shape_def.density = 1
+    shape_def.baseMaterial.friction = 0.3
+
+    _ = box.CreateHullShape(cube1_body_id, shape_def, &dynamic_box.base)
 }
 
 game_destroy :: proc() {
@@ -129,8 +163,9 @@ rotate_camera :: proc(dt: f32) {
     rotate := (pos - last_pos) * mouse_speed * 0.1
     last_pos = pos
 
-    cam.rotation.xy += rotate.yx
-    cam.rotation.x = math.clamp(cam.rotation.x, -90, 90)
+    cam_euler.xy += rotate.yx
+    cam_euler.x = math.clamp(cam_euler.x, -90, 90)
+    set_rotation_euler(cam.id, cam_euler)
 }
 
 last_dir: vec3
@@ -177,7 +212,17 @@ move_camera :: proc(dt: f32) {
 time: f64
 game_update :: proc(dt: f64) {
     delta := f32(dt)
-    rotate_cube.rotation.xy += 45 * delta * cube_speed
+    rotate_delta := vec3_to_quat({ 45 * delta * cube_speed, 45 * delta * cube_speed, 0 })
+    rotate_cube.rotation = rotate_delta * rotate_cube.rotation
+
+    time_step:      f32 = 1. / 60.
+    sub_step_count: i32 = 4
+
+    box.World_Step(world_id, time_step, sub_step_count)
+
+    cube1_trans := box.Body_GetTransform(cube1_body_id)
+    cube1.position = cube1_trans.p.xyz
+    set_rotation_quat(cube1.id, cube1_trans.q)
 
     move_camera(delta)
 
@@ -188,8 +233,6 @@ game_update :: proc(dt: f64) {
         set_text(fps_txt.id, str)
         time = 0
     }
-
-    test_collider(cube1, ground, f32(dt))
 }
 
 game_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {

@@ -20,7 +20,7 @@ id_t :: distinct u128
 vec2 :: distinct [2]f32
 vec3 :: distinct [3]f32
 vec4 :: distinct [4]f32
-quat :: distinct [4]f32
+quat :: quaternion128
 
 vec2i32 :: distinct [2]i32
 vec3i32 :: distinct [3]i32
@@ -81,7 +81,7 @@ vec2_down :: vec2{ 0, -1 }
 vec3_down :: vec3{ 0, -1, 0 }
 vec4_down :: vec4{ 0, -1, 0, 0 }
 
-quat_identity :: quat{ 0, 0, 0, 1 }
+quat_identity :: quaternion(w = 1, x = 0, y = 0, z = 0)
 
 mat2_identity :: mat2{ 1, 0, 0, 1 }
 mat3_identity :: mat3{ 1, 0, 0, 0, 1, 0, 0, 0, 1 }
@@ -130,7 +130,7 @@ mat3f64_zero :: mat3f64{}
 mat4f64_zero :: mat4f64{}
 
 quat_to_mat4 :: proc(q: quat) -> mat4 {
-    x, y, z, w := q.x, q.y, q.z, q.w
+    w, x, y, z := q.w, q.x, q.y, q.z
 
     m00 := 1 - 2 * y * y - 2 * z * z
     m01 := 2 * x * y + 2 * z * w
@@ -153,7 +153,7 @@ quat_to_mat4 :: proc(q: quat) -> mat4 {
 }
 
 quat_to_mat3 :: proc(q: quat) -> mat3 {
-    x, y, z, w := q.x, q.y, q.z, q.w
+    w, x, y, z := q.w, q.x, q.y, q.z
 
     m00 := 1 - 2 * y * y - 2 * z * z
     m01 := 2 * x * y + 2 * z * w
@@ -169,29 +169,52 @@ quat_to_mat3 :: proc(q: quat) -> mat3 {
 }
 
 vec3_to_quat :: proc(v: vec3) -> quat {
-    cr := math.cos(v.x * 0.5)
-    sr := math.sin(v.x * 0.5)
-    cp := math.cos(v.y * 0.5)
-    sp := math.sin(v.y * 0.5)
-    cy := math.cos(v.z * 0.5)
-    sy := math.sin(v.z * 0.5)
+    rx := v.x * math.RAD_PER_DEG * 0.5
+    ry := v.y * math.RAD_PER_DEG * 0.5
+    rz := v.z * math.RAD_PER_DEG * 0.5
 
-    return quat{
-        (sr * cp * cy) - (cr * sp * sy),
-        (cr * sp * cy) + (sr * cp * sy),
-        (cr * cp * sy) - (sr * sp * cy),
-        (cr * cp * cy) + (sr * sp * sy),
-    }
+    qx := quaternion(w = math.cos(rx), x = math.sin(rx), y = 0, z = 0)
+    qy := quaternion(w = math.cos(ry), x = 0, y = math.sin(ry), z = 0)
+    qz := quaternion(w = math.cos(rz), x = 0, y = 0, z = math.sin(rz))
+
+    // YXZ order: R = Ry(yaw) * Rx(pitch) * Rz(roll)
+    return qy * qx * qz
 }
 
-quat_to_vec3 :: proc(q: quat) -> vec3 {
-    return vec3{
-        math.atan2(2 * (q.x * q.y + q.w * q.z), 1 - 2 * (q.y * q.y + q.z * q.z)),
-        math.asin(2 * (q.x * q.z - q.w * q.y)),
-        math.atan2(2 * (q.x * q.y - q.w * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)),
-    }
-}
+quat_to_vec3 :: proc(q_in: quat) -> vec3 {
+    q := q_in
 
+    // Normalize in case the input drifted from unit length.
+    n := math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
+    if n == 0 do return vec3_zero
+
+    q.w /= n
+    q.x /= n
+    q.y /= n
+    q.z /= n
+
+    // quat_to_mat4 returns the transpose of the rotation matrix, so
+    // m[row, col] == R[col, row].
+    m := quat_to_mat4(q)
+    e := vec3_zero
+
+    // Pitch (rotation around X)
+    sinp := -m[2, 1]
+    sinp = max(-1.0, min(1.0, sinp))
+
+    if sinp >= 0.9999 || sinp <= -0.9999 {
+        // Gimbal lock: pitch is ±90°, so fix yaw = 0 and fold it into roll.
+        e.x = math.copy_sign(math.PI / 2.0, sinp)
+        e.y = 0.0
+        e.z = math.atan2(-m[1, 0], m[0, 0])
+    } else {
+        e.x = math.asin(sinp)
+        e.y = math.atan2(m[2, 0], m[2, 2]) // Yaw (rotation around Y)
+        e.z = math.atan2(m[0, 1], m[1, 1]) // Roll (rotation around Z)
+    }
+
+    return e * math.DEG_PER_RAD
+}
 
 vec3_to_mat3 :: proc(v: vec3) -> mat3 {
     c1 := math.cos(-v.x)
@@ -429,15 +452,13 @@ Model :: struct {
 }
 
 GameObject :: struct {
-    id:        id_t,
-    position:  vec3,
-    rotation:  vec3,
-    quat:      quat,
-    using_quat: bool,
-    scale:     vec3,
-    parent:    id_t,
-    childs:    [dynamic]id_t,
-    enabled:   bool,
+    id:         id_t,
+    position:   vec3,
+    rotation:   quat, // quaternion; use set_rotation_euler/get_rotation_euler for Euler angles
+    scale:      vec3,
+    parent:     id_t,
+    childs:     [dynamic]id_t,
+    enabled:    bool,
 }
 
 INVALID_ID :: ~id_t(1)

@@ -144,11 +144,38 @@ new_empty :: proc(position := vec3_zero, rotation := vec3_zero, scale := vec3_on
     go.id = id
     go.enabled = true
     go.position = position
-    go.rotation = rotation
+    go.rotation = vec3_to_quat(rotation)
     go.scale = scale
     go.parent = INVALID_ID
 
     return go
+}
+
+set_rotation_euler :: proc(obj_id: id_t, euler: vec3) {
+    get_game_obj(obj_id).rotation = vec3_to_quat(euler)
+}
+
+get_rotation_euler :: proc(obj_id: id_t) -> vec3 {
+    return quat_to_vec3(get_game_obj(obj_id).rotation)
+}
+
+rotate_euler :: proc(obj_id: id_t, delta: vec3) {
+    set_rotation_euler(obj_id, get_rotation_euler(obj_id) + delta)
+}
+
+set_rotation_quat :: proc(obj_id: id_t, q: quat) {
+    obj := get_game_obj(obj_id)
+
+    n := math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
+    if n > 0 {
+        obj.rotation = quaternion(w = q.w / n, x = q.x / n, y = q.y / n, z = q.z / n)
+    } else {
+        obj.rotation = quat_identity
+    }
+}
+
+get_object_quat :: proc(obj_id: id_t) -> quat {
+    return get_game_obj(obj_id).rotation
 }
 
 new_object :: proc(model_filepath: string, material: Material = Material{}, loc := #caller_location) -> ^GameObject {
@@ -308,62 +335,12 @@ get_view_yxz :: proc(position, rotation: vec3) -> struct { view: mat4, inverse_v
     return { view_matrix, inverse_view_matrix }
 }
 
-// OLD CODE USING EULER ANGLES
-// update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> struct { model: mat4, normal: mat4 } {
-//     obj := get_game_obj(id, loc)
-//     if obj == nil { return { mat4_identity, mat4_identity } }
-//
-//     pos   := obj.position
-//     rot   := obj.rotation * math.RAD_PER_DEG
-//     scale := obj.scale
-//
-//     if is_2d {
-//         app_size := window_get_window_size()
-//         aspect := window_get_viewport_aspect()
-//
-//         pos = pos / vec3{app_size.x, app_size.y, 1}
-//         pos.x *= aspect
-//
-//         scale_tmp := scale.z
-//         scale /= app_size.x / aspect
-//         scale *= scale_tmp
-//
-//         rot.z = -rot.z
-//     }
-//
-//     c3: f32 = math.cos(rot.z)
-//     s3: f32 = math.sin(rot.z)
-//     c2: f32 = math.cos(rot.x)
-//     s2: f32 = math.sin(rot.x)
-//     c1: f32 = math.cos(rot.y)
-//     s1: f32 = math.sin(rot.y)
-//
-//     model_matrix: mat4 = {
-//         scale.x * (c1 * c3 + s1 * s2 * s3), scale.x * (c2 * s3), scale.x * (c1 * s2 * s3 - c3 * s1), 0.0,
-//         scale.y * (c3 * s1 * s2 - c1 * s3), scale.y * (c2 * c3), scale.y * (c1 * c3 * s2 + s1 * s3), 0.0,
-//         scale.z * (c2 * s1), scale.z * (-s2), scale.z * (c1 * c2), 0.0,
-//         pos.x, pos.y, pos.z, 1.0
-//     }
-//
-//     // normal matrix
-//     scale = 1.0 / scale
-//
-//     normal_matrix: mat4 = {
-//         scale.x * (c1 * c3 + s1 * s2 * s3), scale.x * (c2 * s3), scale.x * (c1 * s2 * s3 - c3 * s1), 0.0,
-//         scale.y * (c3 * s1 * s2 - c1 * s3), scale.y * (c2 * c3), scale.y * (c1 * c3 * s2 + s1 * s3), 0.0,
-//         scale.z * (c2 * s1),scale.z * (-s2), scale.z * (c1 * c2), 0.0,
-//         pos.x, pos.y, pos.z, 1.0
-//     }
-//
-//     return { model_matrix, normal_matrix }
-// }
-
 update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> struct { model: mat4, normal: mat4 } {
     obj := get_game_obj(id, loc)
     if obj == nil { return { mat4_identity, mat4_identity } }
 
     pos   := obj.position
-    rot   := obj.rotation * math.RAD_PER_DEG
+    q     := obj.rotation
     scale := obj.scale
 
     if is_2d {
@@ -377,17 +354,12 @@ update_matrix :: proc (id: id_t, loc := #caller_location, is_2d := false) -> str
         scale /= app_size.x / aspect
         scale *= scale_tmp
 
-        rot.z = -rot.z
+        euler := quat_to_vec3(q)
+        euler.z = -euler.z
+        q = vec3_to_quat(euler)
     }
 
-    quat :quat
-    if obj.using_quat {
-        quat = obj.quat
-    } else {
-        quat = vec3_to_quat(rot)
-    }
-
-    rot_mat := quat_to_mat4(quat)
+    rot_mat := quat_to_mat4(q)
 
     model_matrix: mat4 = {
         rot_mat[0, 0] * scale.x, rot_mat[0, 1] * scale.x, rot_mat[0, 2] * scale.x, 0.0,

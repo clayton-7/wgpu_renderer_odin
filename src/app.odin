@@ -65,7 +65,7 @@ app_update :: proc() {
         game_update(delta_time)
 
         aspect: f32 = window_get_fixed_aspect()
-        view_yxz := get_view_yxz(camera.position, camera.rotation)
+        view_yxz := get_view_yxz(camera.position, get_rotation_euler(camera.id))
 
         global_ubo.projection = get_perspective_projection_matrix(FOV, aspect, 0.01, 3000)
         global_ubo.view = view_yxz.view
