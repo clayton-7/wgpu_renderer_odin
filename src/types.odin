@@ -424,7 +424,8 @@ FontAtlas :: struct {
     end_idx:   u32,
 
     scale:     f32,
-    data:      [^]byte,
+    data:      [^]byte, // rasterized font atlas
+    font_data: [^]byte, // raw ttf data; stb_truetype keeps a pointer into it
     glyphs:    []FontGlyph,
     font_info: ^tt.fontinfo
 }

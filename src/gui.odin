@@ -638,12 +638,15 @@ new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#cal
     atlas.padding = padding
 
     font_data := read_file_to_u8(filepath)
-    defer free(font_data)
 
     if font_data == nil {
         ERROR("Failed to read font file.", loc=loc)
         return obj
     }
+
+    // stb_truetype stores a pointer to this buffer and reads from it for the
+    // lifetime of the font, so it must be kept alive until destroy_fonts.
+    atlas.font_data = font_data
 
     begin_idx := ' '
     end_idx := '~' + 1
