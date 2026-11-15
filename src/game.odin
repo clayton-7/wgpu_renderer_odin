@@ -1,7 +1,6 @@
 package main
 import "core:fmt"
 
-test_gui: ^GameObject
 font: ^GameObject
 fps_txt: ^GameObject
 
@@ -9,26 +8,6 @@ mouse_speed :: 0.5
 
 game_init :: proc(camera: ^GameObject) {
     window_enable_cursor(false)
-
-    test_gui = gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
-        g := get_gui(event.id)
-
-        if event.hovering {
-            set_texture(event.id, "assets/btn/hover/Play@4x.png")
-            g.color.rg = 0.7
-            g.color.b = 1.0
-        } else {
-            set_texture(event.id, "assets/btn/normal/Play@4x.png")
-            g.color.rgb = 1
-        }
-        if event.pressed {
-            DEBUG("clicked")
-        }
-    })
-
-    test_gui.scale.z = 0.5
-    test_gui.position.x = -WIN_SIZE.x + test_gui.scale.x / 2 + 6
-    test_gui.position.y = WIN_SIZE.y - test_gui.scale.y / 1.15
 
     fps_btn := gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
         g := get_gui(event.id)
@@ -38,7 +17,7 @@ game_init :: proc(camera: ^GameObject) {
             g.color.rb = 0.7
             g.color.g = 1.0
         } else {
-            set_texture(event.id, "assets/btn/normal/MediumArrow-Right@4x.png")
+            set_texture(event.id, "assets/btn/normal/Play@4x.png")
             g.color.rgb = 1
         }
 
@@ -46,7 +25,7 @@ game_init :: proc(camera: ^GameObject) {
     })
 
     fps_btn.scale.z = 0.5
-    fps_btn.position.x = -WIN_SIZE.x + fps_btn.scale.x * 1.5 + 6
+    fps_btn.position.x = -WIN_SIZE.x + fps_btn.scale.x / 2 + 6
     fps_btn.position.y = WIN_SIZE.y - fps_btn.scale.y / 1.15
 
     fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.75})

@@ -83,9 +83,9 @@ device_create_surface_textures :: proc(size: vec2) {
         viewFormats     = &render_textures.view_format,
         width           = u32(size.x),
         height          = u32(size.y),
-        presentMode     = .Fifo,
-         //presentMode     = .Mailbox,
-         //presentMode     = .Immediate,
+        // presentMode     = .Fifo,
+        // presentMode     = .Mailbox,
+        presentMode     = .Immediate,
     }
 
     wgpu.SurfaceConfigure(device.surface, &config)

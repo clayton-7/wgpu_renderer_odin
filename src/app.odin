@@ -22,7 +22,7 @@ app_init :: proc() {
     device_init()
 
     gui_init()
-    render_init()
+    // render_init()
     // skybox_init()
 
     app_update()
@@ -30,7 +30,7 @@ app_init :: proc() {
 
 app_destroy :: proc() {
     // skybox_destroy()
-    render_destroy()
+    // render_destroy()
     gui_destroy()
     device_destroy()
     window_destroy()
@@ -61,13 +61,14 @@ app_update :: proc() {
         delta_time = current_frame - last_frame
         last_frame = current_frame
 
-        render_update_lights(&global_ubo, { 0.4, 0.4, 0.4 })
+        // render_update_lights(&global_ubo, { 0.4, 0.4, 0.4 })
         game_update(delta_time)
 
         aspect: f32 = window_get_fixed_aspect()
         view_yxz := get_view_yxz(camera.position, get_rotation_euler(camera.id))
 
-        global_ubo.projection = get_perspective_projection_matrix(FOV, aspect, 0.01, 3000)
+        // global_ubo.projection = get_perspective_projection_matrix(FOV, aspect, 0.01, 3000)
+        global_ubo.projection = get_orthographic_projection(-aspect, aspect, -1, 1, -1, 1)
         global_ubo.view = view_yxz.view
         global_ubo.inverse_view = view_yxz.inverse_view
 
@@ -117,7 +118,7 @@ app_update :: proc() {
         wgpu.RenderPassEncoderSetViewport(render_pass, view.x, view.y, view.w, view.h, 0.0, 1.0)
 
         // skybox_draw(render_pass, device.queue, global_ubo)
-        render_draw(render_pass, device.queue, global_ubo)
+        // render_draw(render_pass, device.queue, global_ubo)
         gui_draw(render_pass, device.queue, global_ubo)
 
         wgpu.RenderPassEncoderEnd(render_pass)

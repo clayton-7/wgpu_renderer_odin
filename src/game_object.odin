@@ -37,10 +37,12 @@ GLTF_TYPE :: enum(u32) {
 @(private="file") async_textures: [dynamic]ATexture
 
 go_init :: proc() {
-    async_textures.allocator = context.temp_allocator
+    async_textures.allocator = context.allocator
 }
 
 go_destroy :: proc() {
+    delete(async_textures)
+
     destroy_model()
     destroy_textures()
     //destroy_texts()
@@ -848,7 +850,6 @@ _set_texture :: proc(t : ATexture) {
         gui_create_bind_group(id)
 
     } else {
-
         model := get_model(id, loc=loc)
         go := get_game_obj(id, loc=loc)
 
@@ -858,10 +859,10 @@ _set_texture :: proc(t : ATexture) {
 }
 
 async_set_textures :: proc() {
-    if wgpu.DevicePoll(device.device, true) do return
+    if len(async_textures) <= 0 do return
 
-    for t in async_textures {
-        _set_texture(t)
+    for i in 0 ..< len(async_textures) {
+        _set_texture(async_textures[i])
         pop(&async_textures)
     }
 }
