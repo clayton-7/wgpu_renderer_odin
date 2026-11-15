@@ -23,13 +23,13 @@ app_init :: proc() {
 
     gui_init()
     render_init()
-    skybox_init()
+    // skybox_init()
 
     app_update()
 }
 
 app_destroy :: proc() {
-    skybox_destroy()
+    // skybox_destroy()
     render_destroy()
     gui_destroy()
     device_destroy()
@@ -116,7 +116,7 @@ app_update :: proc() {
         wgpu.RenderPassEncoderSetScissorRect(render_pass, u32(view.x), u32(view.y), u32(view.w), u32(view.h))
         wgpu.RenderPassEncoderSetViewport(render_pass, view.x, view.y, view.w, view.h, 0.0, 1.0)
 
-        skybox_draw(render_pass, device.queue, global_ubo)
+        // skybox_draw(render_pass, device.queue, global_ubo)
         render_draw(render_pass, device.queue, global_ubo)
         gui_draw(render_pass, device.queue, global_ubo)
 
