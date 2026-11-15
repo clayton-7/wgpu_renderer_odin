@@ -37,10 +37,12 @@ GLTF_TYPE :: enum(u32) {
 @(private="file") async_textures: [dynamic]ATexture
 
 go_init :: proc() {
-    async_textures.allocator = context.temp_allocator
+    async_textures.allocator = context.allocator
 }
 
 go_destroy :: proc() {
+    delete(async_textures)
+
     destroy_model()
     destroy_textures()
     //destroy_texts()
@@ -858,8 +860,6 @@ _set_texture :: proc(t : ATexture) {
 }
 
 async_set_textures :: proc() {
-    if wgpu.DevicePoll(device.device, true) do return
-
     for t in async_textures {
         _set_texture(t)
         pop(&async_textures)

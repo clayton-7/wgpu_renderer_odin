@@ -97,7 +97,7 @@ game_init :: proc(camera: ^GameObject) {
             g.color.rb = 0.7
             g.color.g = 1.0
         } else {
-            set_texture(event.id, "assets/btn/normal/MediumArrow-Right@4x.png")
+            set_texture(event.id, "assets/btn/normal/Play@4x.png")
             g.color.rgb = 1
         }
 
