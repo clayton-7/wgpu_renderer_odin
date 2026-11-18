@@ -859,8 +859,6 @@ _set_texture :: proc(t : ATexture) {
 }
 
 async_set_textures :: proc() {
-    if len(async_textures) <= 0 do return
-
     for i in 0 ..< len(async_textures) {
         _set_texture(async_textures[i])
         pop(&async_textures)

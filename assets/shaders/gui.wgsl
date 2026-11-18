@@ -16,6 +16,7 @@ struct GlobalUbo {
 
 struct ModelUbo {
     model_matrix: mat4x4f,
+    view_matrix:  mat4x4f,
     color:        vec4f,
     is_font:      u32,
 };
@@ -31,7 +32,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     let world_pos = model_ubo.model_matrix * vec4f(in.position.xyz, 1.0);
-    out.position = global_ubo.projection * global_ubo.view * world_pos;
+    // out.position = global_ubo.projection * global_ubo.view * world_pos;
+    out.position = global_ubo.projection * model_ubo.view_matrix * world_pos;
     out.uv = in.uv.rg;
 
     return out;

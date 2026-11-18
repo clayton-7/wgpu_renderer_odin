@@ -2,11 +2,16 @@ package main
 import "core:fmt"
 
 font: ^GameObject
+cam: ^GameObject
+player: ^GameObject
 fps_txt: ^GameObject
 
 mouse_speed :: 0.5
 
 game_init :: proc(camera: ^GameObject) {
+    cam = camera
+    cam.position.xyz = 0
+
     window_enable_cursor(false)
 
     fps_btn := gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
@@ -24,11 +29,11 @@ game_init :: proc(camera: ^GameObject) {
         fps_lock = !event.toggle
     })
 
-    fps_btn.scale.z = 0.5
-    fps_btn.position.x = -WIN_SIZE.x + fps_btn.scale.x / 2 + 6
-    fps_btn.position.y = WIN_SIZE.y - fps_btn.scale.y / 1.15
+    fps_btn.scale.z = 0.3
+    fps_btn.position.x = -WIN_SIZE.x + fps_btn.scale.x / 2.7
+    fps_btn.position.y = WIN_SIZE.y - fps_btn.scale.y / 1.5
 
-    fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.75})
+    fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.75 })
     fps_bg.scale.x = 360
     fps_bg.scale.y = 32
     fps_bg.position.x = -WIN_SIZE.x + fps_bg.scale.x + 6
@@ -42,6 +47,11 @@ game_init :: proc(camera: ^GameObject) {
     gui_set_render_index(fps_txt.id, 2)
 
     set_parent(fps_bg.id, fps_txt.id)
+
+    player = gui_create_quad()
+    player.scale = 12
+    gui := get_gui(player.id)
+    gui.gui_type = .GAME_OBJECT
 }
 
 game_destroy :: proc() {}

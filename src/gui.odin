@@ -176,9 +176,12 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
 
         ui_ubo := GuiUbo{
             model = model_matrix,
+            view = mat4_identity,
             is_font = is_font,
             color = g.color,
         }
+
+        if g.gui_type == .GAME_OBJECT do ui_ubo.view = global_ubo.view
 
         wgpu.RenderPassEncoderSetBindGroup(render_pass, 1, g.bind_group)
         wgpu.QueueWriteBuffer(queue, g.ubo, 0, &ui_ubo, size_of(GuiUbo))

@@ -292,6 +292,7 @@ GlobalUbo :: struct {
 
 GuiUbo :: struct {
     model:      mat4,
+    view:       mat4,
     color:      vec4,
     is_font:    u32,
     pad:        vec3
@@ -378,6 +379,7 @@ GuiType :: enum {
     BUTTON,
     TEXT,
     ATLAS,
+    GAME_OBJECT,
 }
 
 GuiEvent :: struct {
