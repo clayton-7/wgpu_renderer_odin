@@ -60,16 +60,19 @@ game_destroy :: proc() {}
 game_update :: proc(dt: f64) {
     delta := f32(dt)
 
+    if is_key_holding(sdl3.Scancode.A) do player.position.x -= 1000.0 * delta
+    if is_key_holding(sdl3.Scancode.D) do player.position.x += 1000.0 * delta
+    if is_key_holding(sdl3.Scancode.SPACE) do player.position.y += 10000.0 * delta
+
+    if is_key_pressed(sdl3.K_TAB) do window_toggle_cursor()
+    if is_key_pressed(sdl3.K_ESCAPE) do app_quit()
+
     str := fmt.tprintf("FPS:%.2f (%.6f ms)", 1 / dt, dt * 1000)
     set_text(fps_txt.id, str)
 }
 
 game_input :: proc(event: sdl3.KeyboardEvent) {
-    if event.key == sdl3.K_ESCAPE do app_quit()
-
-    if event.key == sdl3.K_TAB && event.down {
-        window_toggle_cursor()
-    }
+    // DEBUG(event)
 }
 
 game_scroll :: proc(value: vec2) {

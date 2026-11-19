@@ -341,6 +341,8 @@ Device :: struct {
     adapter  : wgpu.Adapter,
     device   : wgpu.Device,
     queue    : wgpu.Queue,
+
+    max_texture_size: u32,
 }
 
 RenderTextures :: struct {

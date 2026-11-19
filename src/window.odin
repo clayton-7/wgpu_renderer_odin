@@ -5,6 +5,12 @@ import "vendor:wgpu"
 import "vendor:wgpu/sdl3glue"
 import "core:c"
 
+KEY_COUNT :: 512 // SDL_SCANCODE_COUNT
+
+key_holding:  [KEY_COUNT]bool
+key_pressed:  [KEY_COUNT]bool
+key_released: [KEY_COUNT]bool
+key_repeated: [KEY_COUNT]bool
 app_window_size: vec2
 
 window_init :: proc(win_size: vec2, name: cstring) -> ^sdl3.Window {
@@ -66,8 +72,6 @@ window_get_fixed_aspect_viewport :: proc() -> struct { x: f32, y: f32, w: f32, h
 
 window_get_cursor_position :: proc() -> vec2f64 {
     x, y := f32(0), f32(0)
-    // NOTE: GetMouseState returns window-relative coordinates, like glfw.GetCursorPos did.
-    // GetGlobalMouseState returns desktop coordinates and breaks GUI hit testing.
     _ = sdl3.GetMouseState(&x, &y)
     return vec2f64{ f64(x), f64(y) }
 }
@@ -91,25 +95,107 @@ window_toggle_cursor :: proc() {
     _ = err
 }
 
-is_key_pressed :: proc(key: sdl3.Keycode) -> bool {
-    state := sdl3.GetKeyboardState(nil)
-    return state[int(key)]
+key_index :: proc(scancode: sdl3.Scancode) -> int {
+    i := int(scancode)
+    if i < 0 || i >= KEY_COUNT do return -1
+    return i
 }
 
-is_key_released :: proc(key: sdl3.Keycode) -> bool {
-    state := sdl3.GetKeyboardState(nil)
-    return !state[int(key)]
+keyboard_new_frame :: proc() {
+    for i in 0 ..< KEY_COUNT {
+        key_pressed[i] = false
+        key_released[i] = false
+    }
 }
 
-is_key_repeated :: proc(key: sdl3.Keycode) -> bool {
-    // SDL3 doesn't have a direct "repeated" state,
-    // we track this in the event loop
-    return false
+keyboard_event :: proc(event: sdl3.KeyboardEvent) {
+    i := key_index(event.scancode)
+    if i < 0 do return
+
+    if event.down {
+        key_holding[i] = true
+
+        if event.repeat do key_repeated[i] = true
+        else do key_pressed[i] = true
+
+        key_released[i] = false
+    } else {
+        key_holding[i] = false
+        key_repeated[i] = false
+        key_released[i] = true
+        key_pressed[i] = false
+    }
 }
 
-is_key_holding :: proc(key: sdl3.Keycode) -> bool {
-    state := sdl3.GetKeyboardState(nil)
-    return state[int(key)]
+is_key_holding_scancode :: proc(scancode: sdl3.Scancode) -> bool {
+    i := key_index(scancode)
+    return i >= 0 && key_holding[i]
+}
+
+is_key_pressed_scancode :: proc(scancode: sdl3.Scancode) -> bool {
+    i := key_index(scancode)
+    return i >= 0 && key_pressed[i]
+}
+
+is_key_released_scancode :: proc(scancode: sdl3.Scancode) -> bool {
+    i := key_index(scancode)
+    return i >= 0 && key_released[i]
+}
+
+is_key_repeated_scancode :: proc(scancode: sdl3.Scancode) -> bool {
+    i := key_index(scancode)
+    return i >= 0 && key_repeated[i]
+}
+
+key_to_scancode :: proc(key: sdl3.Keycode) -> sdl3.Scancode {
+    mod := sdl3.Keymod{}
+    return sdl3.GetScancodeFromKey(key, &mod)
+}
+
+keycode_index :: proc(key: sdl3.Keycode) -> int {
+    scancode := key_to_scancode(key)
+    if scancode == sdl3.Scancode.UNKNOWN do return -1
+    return key_index(scancode)
+}
+
+is_key_holding_keycode :: proc(key: sdl3.Keycode) -> bool {
+    i := keycode_index(key)
+    return i >= 0 && key_holding[i]
+}
+
+is_key_pressed_keycode :: proc(key: sdl3.Keycode) -> bool {
+    i := keycode_index(key)
+    return i >= 0 && key_pressed[i]
+}
+
+is_key_released_keycode :: proc(key: sdl3.Keycode) -> bool {
+    i := keycode_index(key)
+    return i >= 0 && key_released[i]
+}
+
+is_key_repeated_keycode :: proc(key: sdl3.Keycode) -> bool {
+    i := keycode_index(key)
+    return i >= 0 && key_repeated[i]
+}
+
+is_key_holding :: proc {
+    is_key_holding_scancode,
+    is_key_holding_keycode,
+}
+
+is_key_pressed :: proc {
+    is_key_pressed_scancode,
+    is_key_pressed_keycode,
+}
+
+is_key_released :: proc {
+    is_key_released_scancode,
+    is_key_released_keycode,
+}
+
+is_key_repeated :: proc {
+    is_key_repeated_scancode,
+    is_key_repeated_keycode,
 }
 
 set_cursor_position :: proc(pos: vec2) {
