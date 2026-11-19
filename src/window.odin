@@ -1,42 +1,38 @@
 package main
 
-import "vendor:glfw"
+import "vendor:sdl3"
 import "vendor:wgpu"
-import "vendor:wgpu/glfwglue"
+import "vendor:wgpu/sdl3glue"
 import "core:c"
 
 app_window_size: vec2
 
-window_init :: proc(win_size: vec2, name: cstring) -> glfw.WindowHandle {
+window_init :: proc(win_size: vec2, name: cstring) -> ^sdl3.Window {
     app_window_size = win_size
 
-    if !glfw.Init() do FATAL("Failed to initialize GLFW")
+    if !sdl3.Init(sdl3.INIT_VIDEO) do FATAL("Failed to initialize SDL3")
 
-    glfw.WindowHint(glfw.DECORATED, false)
-    glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-    glfw.WindowHintString(glfw.WAYLAND_APP_ID, name)
-    glfw.WindowHintString(glfw.X11_CLASS_NAME, name)
-    glfw.WindowHintString(glfw.X11_INSTANCE_NAME, name)
+    flags := sdl3.WindowFlags{ .BORDERLESS, .RESIZABLE }
+    window = sdl3.CreateWindow(name, c.int(win_size.x), c.int(win_size.y), flags)
 
-    window = glfw.CreateWindow(c.int(win_size.x), c.int(win_size.y), name, nil, nil)
-
-    if window == nil do FATAL("Failed to create GLFW window")
+    if window == nil do FATAL("Failed to create SDL3 window")
 
     return window
 }
 
 window_destroy :: proc() {
-    glfw.DestroyWindow(window)
-    glfw.Terminate()
+    sdl3.DestroyWindow(window)
+    sdl3.Quit()
 }
 
 window_get_size :: proc() -> (size: vec2) {
-    w, h := glfw.GetWindowSize(window)
+    w, h := c.int(0), c.int(0)
+    sdl3.GetWindowSize(window, &w, &h)
     return vec2{f32(w), f32(h)}
 }
 
 window_set_size :: proc(size: vec2) {
-    glfw.SetWindowSize(window, i32(size.x), i32(size.y))
+    sdl3.SetWindowSize(window, c.int(size.x), c.int(size.y))
 }
 
 window_get_aspect :: proc() -> f32 {
@@ -69,53 +65,57 @@ window_get_fixed_aspect_viewport :: proc() -> struct { x: f32, y: f32, w: f32, h
 }
 
 window_get_cursor_position :: proc() -> vec2f64 {
-    x, y := glfw.GetCursorPos(window)
-    return vec2f64{ x, y }
+    x, y := f32(0), f32(0)
+    // NOTE: GetMouseState returns window-relative coordinates, like glfw.GetCursorPos did.
+    // GetGlobalMouseState returns desktop coordinates and breaks GUI hit testing.
+    _ = sdl3.GetMouseState(&x, &y)
+    return vec2f64{ f64(x), f64(y) }
 }
 
 window_get_cursor_position_f32 :: proc() -> vec2 {
-    x, y := glfw.GetCursorPos(window)
-    return vec2{ f32(x), f32(y) }
+    x, y := f32(0), f32(0)
+    _ = sdl3.GetMouseState(&x, &y)
+    return vec2{ x, y }
 }
 
-window_get_surface :: proc(instance: wgpu.Instance) -> wgpu.Surface { return glfwglue.GetSurface(instance, window) }
+window_get_surface :: proc(instance: wgpu.Instance) -> wgpu.Surface { return sdl3glue.GetSurface(instance, window) }
 
 window_enable_cursor :: proc(enable: bool) {
-    mode := glfw.CURSOR_NORMAL if enable else glfw.CURSOR_DISABLED
-    glfw.SetInputMode(window, glfw.CURSOR, c.int(mode))
+    err := sdl3.SetWindowRelativeMouseMode(window, enable)
+    _ = err
 }
 
 window_toggle_cursor :: proc() {
-    mode := glfw.CURSOR_DISABLED
-    if glfw.GetInputMode(window, glfw.CURSOR) == glfw.CURSOR_DISABLED do mode = glfw.CURSOR_NORMAL
-
-    glfw.SetInputMode(window, glfw.CURSOR, c.int(mode))
+    enabled := sdl3.GetWindowRelativeMouseMode(window)
+    err := sdl3.SetWindowRelativeMouseMode(window, !enabled)
+    _ = err
 }
 
-is_key_pressed :: proc(key: Key) -> bool {
-    return glfw.GetKey(window, i32(key)) == i32(State.PRESS)
+is_key_pressed :: proc(key: sdl3.Keycode) -> bool {
+    state := sdl3.GetKeyboardState(nil)
+    return state[int(key)]
 }
 
-is_key_released :: proc(key: Key) -> bool {
-    return !(glfw.GetKey(window, i32(key)) == i32(State.PRESS)) && glfw.GetKey(window, i32(key)) == i32(State.RELEASE)
+is_key_released :: proc(key: sdl3.Keycode) -> bool {
+    state := sdl3.GetKeyboardState(nil)
+    return !state[int(key)]
 }
 
-is_key_repeated :: proc(key: Key) -> bool {
-    return glfw.GetKey(window, i32(key)) == i32(State.HOLD)
+is_key_repeated :: proc(key: sdl3.Keycode) -> bool {
+    // SDL3 doesn't have a direct "repeated" state,
+    // we track this in the event loop
+    return false
 }
 
-is_key_holding :: proc(key: Key) -> bool {
-    return glfw.GetKey(window, i32(key)) == i32(State.PRESS) && !(glfw.GetKey(window, i32(key)) == i32(State.RELEASE))
+is_key_holding :: proc(key: sdl3.Keycode) -> bool {
+    state := sdl3.GetKeyboardState(nil)
+    return state[int(key)]
 }
 
 set_cursor_position :: proc(pos: vec2) {
-    glfw.SetCursorPos(window, f64(pos.x), f64(pos.y))
+    sdl3.WarpMouseInWindow(window, pos.x, pos.y)
 }
 
-// enable_cursor :: proc(enable: bool) {
-//     glfw.SetInputMode(window, glfw.CURSOR, if (enable) glfw.CURSOR_DISABLED else glfw.CURSOR_NORMAL)
-// }
-
 is_cursor_enabled :: proc() -> bool {
-    return glfw.GetInputMode(window, glfw.CURSOR) != i32(glfw.CURSOR_DISABLED)
+    return !sdl3.GetWindowRelativeMouseMode(window)
 }

@@ -1,5 +1,6 @@
 package main
 import "core:fmt"
+import "vendor:sdl3"
 
 font: ^GameObject
 cam: ^GameObject
@@ -63,16 +64,16 @@ game_update :: proc(dt: f64) {
     set_text(fps_txt.id, str)
 }
 
-game_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
-    if key == .ESCAPE do app_exit()
+game_input :: proc(event: sdl3.KeyboardEvent) {
+    if event.key == sdl3.K_ESCAPE do app_quit()
 
-    if key == .TAB && state == .RELEASE {
+    if event.key == sdl3.K_TAB && event.down {
         window_toggle_cursor()
     }
 }
 
-game_scroll :: proc(value: vec2f64) {
-    // cam_speed += f32(value.y) * 0.1 * cam_speed
+game_scroll :: proc(value: vec2) {
+    // cam_speed += value.y * 0.1 * cam_speed
     // cam_speed = max(0.005, cam_speed)
 }
 
