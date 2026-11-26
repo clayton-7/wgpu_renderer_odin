@@ -3,12 +3,13 @@ package main
 import math "core:math/linalg"
 // import mu "vendor:microui"
 import "core:fmt"
+import "vendor:sdl3"
 import box "vendor:box3d"
 
 crosshair: ^GameObject
 rotate_cube: ^GameObject
 cam: ^GameObject
-test_gui: ^GameObject
+box_rot_btn: ^GameObject
 font: ^GameObject
 fps_txt: ^GameObject
 cube1: ^GameObject
@@ -21,7 +22,6 @@ mouse_speed :: 0.5
 cam_speed: f32 = 12.0
 acc: f32 = 0
 cube_speed: f32 = 1
-last_pos: vec2
 cam_euler: vec3
 
 game_init :: proc(camera: ^GameObject) {
@@ -69,7 +69,7 @@ game_init :: proc(camera: ^GameObject) {
     light := new_light_obj(.Directional, { 1, 1, 1, 1 })
     set_rotation_euler(light.id, { 45, 0, 0 })
 
-    test_gui = gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
+    box_rot_btn = gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
         g := get_gui(event.id)
 
         if event.hovering {
@@ -85,9 +85,9 @@ game_init :: proc(camera: ^GameObject) {
         }
     })
 
-    test_gui.scale.z = 0.5
-    test_gui.position.x = -WIN_SIZE.x + test_gui.scale.x / 2 + 6
-    test_gui.position.y = WIN_SIZE.y - test_gui.scale.y / 1.15
+    box_rot_btn.scale.z = 0.3
+    box_rot_btn.position.x = -WIN_SIZE.x + box_rot_btn.scale.x
+    box_rot_btn.position.y = WIN_SIZE.y - box_rot_btn.scale.y / 1.5
 
     fps_btn := gui_create_quad("assets/btn/normal/Play@4x.png", proc(event: GuiEvent) {
         g := get_gui(event.id)
@@ -104,11 +104,11 @@ game_init :: proc(camera: ^GameObject) {
         fps_lock = !event.toggle
     })
 
-    fps_btn.scale.z = 0.5
-    fps_btn.position.x = -WIN_SIZE.x + fps_btn.scale.x * 1.5 + 6
-    fps_btn.position.y = WIN_SIZE.y - fps_btn.scale.y / 1.15
+    fps_btn.scale.z = 0.3
+    fps_btn.position.x = -WIN_SIZE.x + fps_btn.scale.x / 2.7
+    fps_btn.position.y = WIN_SIZE.y - fps_btn.scale.y / 1.5
 
-    fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.75})
+    fps_bg := gui_create_quad(color = vec4{ 0, 0, 0, 0.75 })
     fps_bg.scale.x = 360
     fps_bg.scale.y = 32
     fps_bg.position.x = -WIN_SIZE.x + fps_bg.scale.x + 6
@@ -153,15 +153,11 @@ game_init :: proc(camera: ^GameObject) {
     _ = box.CreateHullShape(cube1_body_id, shape_def, &dynamic_box.base)
 }
 
-game_destroy :: proc() {
-
-}
+game_destroy :: proc() {}
 
 rotate_camera :: proc(dt: f32) {
-    pos := window_get_cursor_position_f32()
-
-    rotate := (pos - last_pos) * mouse_speed * 0.1
-    last_pos = pos
+    motion := window_get_relative_mouse_motion()
+    rotate := motion * mouse_speed * 0.1
 
     cam_euler.xy += rotate.yx
     cam_euler.x = math.clamp(cam_euler.x, -90, 90)
@@ -178,13 +174,13 @@ move_camera :: proc(dt: f32) {
     forward_dir := get_object_forward_dir(cam.id)
     right_dir := get_object_right_dir(cam.id)
 
-    if is_key_pressed(.W) do cam_dir += forward_dir
-    if is_key_pressed(.S) do cam_dir -= forward_dir
-    if is_key_pressed(.A) do cam_dir -= right_dir
-    if is_key_pressed(.D) do cam_dir += right_dir
+    if is_key_holding(sdl3.Scancode.W) do cam_dir += forward_dir
+    if is_key_holding(sdl3.Scancode.S) do cam_dir -= forward_dir
+    if is_key_holding(sdl3.Scancode.A) do cam_dir -= right_dir
+    if is_key_holding(sdl3.Scancode.D) do cam_dir += right_dir
 
-    if is_key_pressed(.E) || is_key_pressed(.SPACE) do        cam_dir += vec3_up
-    if is_key_pressed(.Q) || is_key_pressed(.LEFT_CONTROL) do cam_dir -= vec3_up
+    if is_key_holding(sdl3.Scancode.E) || is_key_holding(sdl3.K_SPACE) do cam_dir += vec3_up
+    if is_key_holding(sdl3.Scancode.Q) || is_key_holding(sdl3.K_LCTRL) do cam_dir -= vec3_up
 
     if math.dot(cam_dir, cam_dir) > math.F32_EPSILON {
         last_dir = cam_dir
@@ -198,7 +194,7 @@ move_camera :: proc(dt: f32) {
     if math.dot(cam_dir, cam_dir) > math.F32_EPSILON {
         cam_dir = math.normalize(cam_dir)
 
-        if is_key_pressed(.LEFT_SHIFT) {
+        if is_key_holding(sdl3.K_LCTRL) {
             cam_dir *= 3.0 * cam_speed * dt
         } else {
             cam_dir *= cam_speed * dt
@@ -214,6 +210,9 @@ game_update :: proc(dt: f64) {
     delta := f32(dt)
     rotate_delta := vec3_to_quat({ 45 * delta * cube_speed, 45 * delta * cube_speed, 0 })
     rotate_cube.rotation = rotate_delta * rotate_cube.rotation
+
+    if is_key_pressed(sdl3.K_TAB) do window_toggle_cursor()
+    if is_key_pressed(sdl3.K_ESCAPE) do app_quit()
 
     time_step:      f32 = 1. / 60.
     sub_step_count: i32 = 4
@@ -235,21 +234,12 @@ game_update :: proc(dt: f64) {
     }
 }
 
-game_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
-    if key == .CAPS_LOCK || key == .ESCAPE do app_exit()
-
-    if key == .TAB && state == .RELEASE {
-        if is_cursor_enabled() {
-            cursor_pos := window_get_cursor_position()
-            last_pos = vec2{f32(cursor_pos.x), f32(cursor_pos.y)}
-        }
-
-        window_toggle_cursor()
-    }
+game_input :: proc(event: sdl3.KeyboardEvent) {
+    // DEBUG(event)
 }
 
-game_scroll :: proc(value: vec2f64) {
-    cam_speed += f32(value.y) * 0.1 * cam_speed
+game_scroll :: proc(value: vec2) {
+    cam_speed += value.y * 0.1 * cam_speed
     cam_speed = max(0.005, cam_speed)
 }
 

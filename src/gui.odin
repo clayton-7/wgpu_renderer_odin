@@ -1,6 +1,7 @@
 package main
 
 import "vendor:wgpu"
+import "vendor:sdl3"
 import tt "vendor:stb/truetype"
 import "core:math"
 import "core:fmt"
@@ -176,9 +177,12 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
 
         ui_ubo := GuiUbo{
             model = model_matrix,
+            view = mat4_identity,
             is_font = is_font,
             color = g.color,
         }
+
+        if g.gui_type == .GAME_OBJECT do ui_ubo.view = global_ubo.view
 
         wgpu.RenderPassEncoderSetBindGroup(render_pass, 1, g.bind_group)
         wgpu.QueueWriteBuffer(queue, g.ubo, 0, &ui_ubo, size_of(GuiUbo))
@@ -189,8 +193,9 @@ gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_
     }
 }
 
-gui_cursor_event :: proc(pos: vec2) {
+gui_cursor_event :: proc(event: sdl3.MouseMotionEvent) {
     guis := get_guis()
+    cursor := vec2{ event.x, event.y }
 
     for &g, i in guis {
         if g.event_callback == nil do continue
@@ -204,7 +209,7 @@ gui_cursor_event :: proc(pos: vec2) {
 
         e.released = false
         e.hovering = false
-        on_hover := is_mouse_on_gui(obj)
+        on_hover := is_mouse_on_gui(obj, cursor)
 
         if last_event_hover && !on_hover {
             e.hovering = false
@@ -222,8 +227,9 @@ gui_cursor_event :: proc(pos: vec2) {
     }
 }
 
-gui_mouse :: proc(btn: MouseButton, state: State, mod: Mod) {
+gui_mouse :: proc(event: sdl3.MouseButtonEvent) {
     guis := get_guis()
+    cursor := vec2{ event.x, event.y }
 
     for &g, i in guis {
         if g.event_callback == nil do continue
@@ -234,31 +240,35 @@ gui_mouse :: proc(btn: MouseButton, state: State, mod: Mod) {
         e := g.last_event
         e.id = id
 
-        if is_mouse_on_gui(obj) {
-            if btn == .LEFT && state == .PRESS {
-                e.holding = true
-                e.pressed = true
-                e.focused = true
-                e.released = false
-                e.toggle = !e.toggle
+        if is_mouse_on_gui(obj, cursor) {
+            if event.button == sdl3.BUTTON_LEFT {
+                if event.down {
+                    e.holding = true
+                    e.pressed = true
+                    e.focused = true
+                    e.released = false
+                } else {
+                    if g.last_event.pressed do e.toggle = !e.toggle
+                }
             }
 
-        } else {
-            if btn == .LEFT && state == .PRESS do e.focused = false
+        } else if event.button == sdl3.BUTTON_LEFT && event.down {
+            e.focused = false
         }
 
-        if btn == .LEFT && state == .RELEASE {
-            e.released = true
+        e.released = g.last_event.pressed
+
+        if event.button == sdl3.BUTTON_LEFT && !event.down {
             e.pressed = false
             e.holding = false
         }
 
         g.last_event = e
-        g.event_callback(e)
+        if e.pressed || e.released || e.holding do g.event_callback(e)
     }
 }
 
-gui_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
+gui_input :: proc(event: sdl3.KeyboardEvent) {
     guis := get_guis()
 
     for &g, i in guis {
@@ -270,7 +280,7 @@ gui_input :: proc(key: Key, scancode: i32, state: State, mod: Mod) {
         e.id = id
 
         if e.focused {
-            e.key = key
+            e.key = event.key
             g.event_callback(e)
         }
     }
@@ -387,20 +397,20 @@ is_point_in_polygon :: proc(point: vec2, polygon: []vec2) -> bool {
     return inside
 }
 
-is_mouse_on_gui :: proc(obj: ^GameObject) -> bool {
+is_mouse_on_gui :: proc(obj: ^GameObject, cursor_pos: vec2) -> bool {
     if !is_cursor_enabled() do return false
 
     view := window_get_fixed_aspect_viewport()
     app_size := window_get_window_size()
 
-    cursor := (((window_get_cursor_position_f32() / vec2{ view.w, view.h }) - 0.5) * 2) * app_size
+    cursor := (((cursor_pos / vec2{ view.w, view.h }) - 0.5) * 2) * app_size
 
     // setting cursor position to be the same independent screen size
     if view.x > 0 {
-        cursor.x = ((((window_get_cursor_position_f32().x - view.x) / view.w -0.5) * 2) * app_size.x)
+        cursor.x = ((((cursor_pos.x - view.x) / view.w -0.5) * 2) * app_size.x)
         cursor.y = -cursor.y
     } else {
-        cursor.y = -((((window_get_cursor_position_f32().y - view.y) / view.h -0.5) * 2) * app_size.y)
+        cursor.y = -((((cursor_pos.y - view.y) / view.h -0.5) * 2) * app_size.y)
     }
 
     corners: []vec2

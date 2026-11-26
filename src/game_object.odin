@@ -860,8 +860,8 @@ _set_texture :: proc(t : ATexture) {
 }
 
 async_set_textures :: proc() {
-    for t in async_textures {
-        _set_texture(t)
+    for i in 0 ..< len(async_textures) {
+        _set_texture(async_textures[i])
         pop(&async_textures)
     }
 }

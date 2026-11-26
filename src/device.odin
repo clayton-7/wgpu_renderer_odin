@@ -36,6 +36,15 @@ device_init :: proc() {
 
         device.device = _device
         device.queue = wgpu.DeviceGetQueue(device.device)
+
+        limits, limit_status := wgpu.DeviceGetLimits(device.device)
+
+        if limit_status == .Success && limits.maxTextureDimension2D > 0 {
+            device.max_texture_size = limits.maxTextureDimension2D
+        } else {
+            device.max_texture_size = MAX_WIN_SIZE
+        }
+
         device_create_surface_textures(window_get_size())
     }
 }
@@ -60,7 +69,32 @@ next_pow2 :: proc(x: u64) -> u64 {
     return v
 }
 
+device_pick_surface_format :: proc() -> wgpu.TextureFormat {
+    caps, status := wgpu.SurfaceGetCapabilities(device.surface, device.adapter)
+    if status != .Success {
+        WARNF("Cannot query the surface capabilities: %v\n", status)
+        return .RGBA8Unorm
+    }
+    defer wgpu.SurfaceCapabilitiesFreeMembers(caps)
+
+    if caps.formatCount == 0 do return .RGBA8Unorm
+
+    for i := 0; i < int(caps.formatCount); i += 1 {
+        if caps.formats[i] == .RGBA8Unorm do return .RGBA8Unorm
+    }
+
+    return caps.formats[0]
+}
+
+device_clamp_size :: proc(size: vec2) -> vec2 {
+    max_dim := f32(device.max_texture_size)
+    if max_dim <= 0.0 do max_dim = f32(MAX_WIN_SIZE)
+    return vec2{ min(size.x, max_dim), min(size.y, max_dim) }
+}
+
 device_create_surface_textures :: proc(size: vec2) {
+    clamped := device_clamp_size(size)
+
     if render_textures.depth_texture != nil {
         wgpu.TextureViewRelease(render_textures.depth_texture_view)
         wgpu.TextureDestroy(render_textures.depth_texture)
@@ -72,7 +106,7 @@ device_create_surface_textures :: proc(size: vec2) {
 
     // DEBUGF("resizing window: w: %d, h: %d\n", size.x, size.y)
 
-    render_textures.view_format = .RGBA8Unorm
+    render_textures.view_format = device_pick_surface_format()
 
     config := wgpu.SurfaceConfiguration{
         device          = device.device,
@@ -81,11 +115,11 @@ device_create_surface_textures :: proc(size: vec2) {
         alphaMode       = .Opaque,
         viewFormatCount = 1,
         viewFormats     = &render_textures.view_format,
-        width           = u32(size.x),
-        height          = u32(size.y),
-        presentMode     = .Fifo,
-         //presentMode     = .Mailbox,
-         //presentMode     = .Immediate,
+        width           = u32(clamped.x),
+        height          = u32(clamped.y),
+        // presentMode     = .Fifo,
+        // presentMode     = .Mailbox,
+        presentMode     = .Immediate,
     }
 
     wgpu.SurfaceConfigure(device.surface, &config)

@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-BIN_NAME=force
+BIN_NAME=Force
 SOURCE_PATH=src
 DEBUG_FLAG="-debug -vet-unused-imports -vet-shadowing -vet-using-stmt -vet-using-param -vet-cast -warnings-as-errors -use-separate-modules"
 

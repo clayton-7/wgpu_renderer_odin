@@ -1,6 +1,6 @@
 package main
 
-import "vendor:glfw"
+import "vendor:sdl3"
 import "vendor:wgpu"
 import "core:time"
 
@@ -8,11 +8,17 @@ WIN_TITLE :: "Force"
 FOV :: 90
 
 TARGET_FPS :: 60.0
+TARGET_FPS_MINIMIZED :: 5.0
 fps_lock: bool = true
+quit: bool = false
  //WIN_SIZE :: vec2{ 1024, 1024 }
 WIN_SIZE :: vec2{ 1920, 1080 }
 // WIN_SIZE :: vec2{ 2560, 1440 }
- // WIN_SIZE :: vec2{ 3840, 2160 }
+// WIN_SIZE :: vec2{ 3840, 2160 }
+
+// only used when the device does not report a texture limit; the WebGPU spec
+// guarantees maxTextureDimension2D to be at least this, so it is a safe floor
+MAX_WIN_SIZE :: 8192
 
 app_init :: proc() {
     ctx = context
@@ -26,6 +32,8 @@ app_init :: proc() {
     skybox_init()
 
     app_update()
+    game_destroy()
+    app_destroy()
 }
 
 app_destroy :: proc() {
@@ -38,27 +46,60 @@ app_destroy :: proc() {
     types_destroy()
 }
 
+app_frame_limit :: proc(begin_time: time.Time, target: f64) {
+    elapsed := time.duration_seconds(time.diff(begin_time, time.now()))
+    free_time := 1.0 / target - elapsed
+
+    if free_time > 0.0 do time.sleep(time.Duration(free_time * f64(time.Second)))
+}
+
 app_update :: proc() {
-    delta_time: f64 = 0.0
-    last_frame: f64 = 0.0
-
+    event := sdl3.Event{}
     global_ubo := GlobalUbo{}
-
-    glfw.SetKeyCallback(window, app_input)
-    glfw.SetScrollCallback(window, app_scroll)
-    glfw.SetWindowSizeCallback(window, app_resize)
-    glfw.SetMouseButtonCallback(window, app_mouse_btn)
-    glfw.SetCursorPosCallback(window, app_cursor)
+    last_frame := time.now()
+    delta_time := f64(0.0)
+    reconfigure_surface := false
 
     camera := new_empty(vec3_back * 9)
     game_init(camera)
 
-    for !glfw.WindowShouldClose(window) {
-        begin_time := glfw.GetTime()
-        glfw.PollEvents()
+    for !quit {
+        begin_time := time.now()
+        keyboard_new_frame()
 
-        current_frame := glfw.GetTime()
-        delta_time = current_frame - last_frame
+        for sdl3.PollEvent(&event) {
+            #partial switch event.type {
+                case sdl3.EventType.QUIT:
+                    quit = true
+                    return
+
+                case sdl3.EventType.KEY_DOWN, sdl3.EventType.KEY_UP:
+                    keyboard_event(event.key)
+                    gui_input(event.key)
+                    game_input(event.key)
+
+                case sdl3.EventType.MOUSE_MOTION:
+                    gui_cursor_event(event.motion)
+
+                case sdl3.EventType.MOUSE_BUTTON_DOWN, sdl3.EventType.MOUSE_BUTTON_UP:
+                    gui_mouse(event.button)
+
+                case sdl3.EventType.MOUSE_WHEEL:
+                    game_scroll(vec2{ event.wheel.x, event.wheel.y })
+
+                case sdl3.EventType.WINDOW_RESIZED:
+                    app_resize(f32(event.window.data1), f32(event.window.data2))
+            }
+        }
+
+        if reconfigure_surface {
+            reconfigure_surface = false
+            size := window_get_size()
+            app_resize(size.x, size.y)
+        }
+
+        current_frame := time.now()
+        delta_time = time.duration_seconds(time.diff(last_frame, current_frame))
         last_frame = current_frame
 
         render_update_lights(&global_ubo, { 0.4, 0.4, 0.4 })
@@ -79,22 +120,33 @@ app_update :: proc() {
         defer wgpu.TextureRelease(surface_texture.texture)
 
         switch surface_texture.status {
-            // TODO: reconfigure surface case `SuccessSuboptimal`
-            case .SuccessOptimal, .SuccessSuboptimal:
-            // case .SuccessSuboptimal:
-            //     wgpu.SurfaceConfigure(device.surface, {})
+            case .SuccessOptimal:
 
-            case .Occluded: continue // the window is minimized or behind another window
+            // the texture is usable for this frame, but the surface settings no
+            // longer fit the window, so they are configured again for the next
+            case .SuccessSuboptimal:
+                reconfigure_surface = true
 
-            // TODO: use wgpu.SurfaceConfigure for Outdated
-            // Outdated: The underlying surface has changed, and therefore the surface configuration is outdated.
-            case .Timeout, .Outdated, .Lost:
+            // the window is minimized or behind another window: nothing can be
+            // presented, so only the events are polled at the minimized rate
+            case .Occluded:
+                app_frame_limit(begin_time, TARGET_FPS_MINIMIZED)
+                continue
+
+            case .Timeout:
+                // nothing was handed over in time for this frame, try the next one
                 INFOF("Cannot acquire the current render texture, status: %v\n", enum_to_string(surface_texture.status))
+                continue
 
-                if surface_texture.texture != nil {
-                    wgpu.TextureRelease(surface_texture.texture)
-                }
-                app_resize(window, i32(WIN_SIZE.x), i32(WIN_SIZE.y))
+            case .Outdated:
+                // the underlying surface has changed, the configuration is outdated and the acquired texture is unusable.
+                INFOF("Cannot acquire the current render texture, status: %v\n", enum_to_string(surface_texture.status))
+                reconfigure_surface = true
+                continue
+
+            case .Lost:
+                // the surface is gone, nothing can be presented anymore
+                INFOF("Cannot acquire the current render texture, status: %v\n", enum_to_string(surface_texture.status))
                 return
 
             case .Error:
@@ -139,60 +191,26 @@ app_update :: proc() {
         free_all(context.temp_allocator)
 
         if fps_lock {
-            target_fps_f64 := f64(TARGET_FPS)
-            free_time : f64 = 1.0 / target_fps_f64 - (glfw.GetTime() - begin_time)
-
-            if free_time > 0.0 {
-                sleep_time := time.Duration(free_time * f64(time.Second))
-                time.sleep(sleep_time)
-            }
+            app_frame_limit(begin_time, TARGET_FPS)
         }
     }
-
-    game_destroy()
-    app_destroy()
 }
 
-app_resize:: proc "c"(window: glfw.WindowHandle, width: i32, height: i32) {
+app_resize :: proc "c" (w: f32, h: f32) {
     context = ctx
-    w := f32(width)
-    h := f32(height)
-
-    // HACK: HANDLE THIS PROPERLY
-    // TODO: FIND THE MAX RESOLUTION SUPPORTED FOR THE CURRENT DEVICE
-    if (w >= 8192 || h >= 8192) {
-        WARNF("Max supported resolution reached: %vx%v\n", w, h)
-        window_set_size(vec2{ min(8192, w), min(8192, h) })
-        return
-    }
-
+    max_size := f32(device.max_texture_size)
     win_size := vec2{ w, h }
+
+    if (win_size.x > max_size || win_size.y > max_size) {
+        WARNF("Max supported resolution reached: %vx%v\n", win_size.x, win_size.y)
+        win_size = vec2{ min(max_size, win_size.x), min(max_size, win_size.y) }
+        window_set_size(win_size)
+    }
 
     device_create_surface_textures(win_size)
     game_resize(win_size)
 }
 
-app_cursor :: proc "c" (_: glfw.WindowHandle, xpos,  ypos: f64) {
-    context = ctx
-    gui_cursor_event(vec2{ f32(xpos), f32(ypos) })
-}
-
-app_mouse_btn :: proc "c" (_: glfw.WindowHandle, button, action, mods: i32) {
-    context = ctx
-    gui_mouse(MouseButton(button), State(action), Mod(mods))
-}
-
-app_input :: proc "c"(_: glfw.WindowHandle, key, scancode, action, mods: i32) {
-    context = ctx
-    gui_input(Key(key), scancode, State(action), Mod(mods))
-    game_input(Key(key), scancode, State(action), Mod(mods))
-}
-
-app_scroll :: proc "c"(_: glfw.WindowHandle, xoffset, yoffset: f64) {
-    context = ctx
-    game_scroll(vec2f64{ xoffset, yoffset} )
-}
-
-app_exit :: proc() {
-    glfw.SetWindowShouldClose(window, true)
+app_quit :: proc() {
+    quit = true
 }
