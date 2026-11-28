@@ -18,208 +18,208 @@ LOG_FULL_PATH :: false
 @(private="file") track_alloc: mem.Tracking_Allocator
 
 logger_init :: proc(temp_allocator := context.temp_allocator) -> runtime.Allocator {
-    tmp_alloc = temp_allocator
+	tmp_alloc = temp_allocator
 
-    when ODIN_DEBUG {
-        mem.tracking_allocator_init(&track_alloc, context.allocator)
-        return mem.tracking_allocator(&track_alloc)
-    }
+	when ODIN_DEBUG {
+		mem.tracking_allocator_init(&track_alloc, context.allocator)
+		return mem.tracking_allocator(&track_alloc)
+	}
 
-    return context.allocator
+	return context.allocator
 }
 
 logger_destroy :: proc() {
-    when ODIN_DEBUG {
-        if len(track_alloc.allocation_map) > 0 {
-            ERRORF("%v allocations not freed:\n", len(track_alloc.allocation_map), disable_location = true)
+	when ODIN_DEBUG {
+		if len(track_alloc.allocation_map) > 0 {
+			ERRORF("%v allocations not freed:\n", len(track_alloc.allocation_map), disable_location = true)
 
-            for _, entry in track_alloc.allocation_map {
-                ERRORF("%v bytes at: %v\n", entry.size, entry.location, disable_location = true)
-            }
-        }
+			for _, entry in track_alloc.allocation_map {
+				ERRORF("%v bytes at: %v\n", entry.size, entry.location, disable_location = true)
+			}
+		}
 
-        if len(track_alloc.bad_free_array) > 0 {
-            ERRORF("%v incorrect frees:\n", len(track_alloc.bad_free_array), disable_location = true)
-            for entry in track_alloc.bad_free_array {
-                fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
-            }
-        }
+		if len(track_alloc.bad_free_array) > 0 {
+			ERRORF("%v incorrect frees:\n", len(track_alloc.bad_free_array), disable_location = true)
+			for entry in track_alloc.bad_free_array {
+				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
+			}
+		}
 
-        mem.tracking_allocator_destroy(&track_alloc)
-    }
+		mem.tracking_allocator_destroy(&track_alloc)
+	}
 }
 
 read_file_to_cstring :: proc(filepath: string, allocator := context.allocator, loc := #caller_location) -> cstring {
-    buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
+	buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
 
-    if err != nil {
-        ERRORF("Failed to read the file:", filepath, loc=loc)
-        return {}
-    }
+	if err != nil {
+		ERRORF("Failed to read the file:", filepath, loc=loc)
+		return {}
+	}
 
-    return cstring(&buffer[0])
+	return cstring(&buffer[0])
 }
 
 read_file_to_string :: proc(filepath: string, allocator := context.allocator, loc := #caller_location) -> string {
-    buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
+	buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
 
-    if err != nil {
-        ERRORF("Failed to read the file:", filepath, loc=loc)
-        return {}
-    }
+	if err != nil {
+		ERRORF("Failed to read the file:", filepath, loc=loc)
+		return {}
+	}
 
-    return strings.string_from_ptr(&buffer[0], len(buffer))
+	return strings.string_from_ptr(&buffer[0], len(buffer))
 }
 
 read_file_to_u8 :: proc(filepath: string, allocator := context.allocator, loc := #caller_location) -> [^]u8 {
-    buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
+	buffer, err := os.read_entire_file_from_path(filepath, allocator, loc)
 
-    if err != nil {
-        ERRORF("Failed to read the file:", filepath, loc=loc)
-        return {}
-    }
+	if err != nil {
+		ERRORF("Failed to read the file:", filepath, loc=loc)
+		return {}
+	}
 
-    return &buffer[0]
+	return &buffer[0]
 }
 
 concat_cstring :: proc(values: []string, allocator := context.temp_allocator) -> cstring {
-    return strings.clone_to_cstring(strings.concatenate(values, allocator), allocator)
+	return strings.clone_to_cstring(strings.concatenate(values, allocator), allocator)
 }
 
 print :: proc(msg: any, level := LOG.DEBUG, new_line := true, loc := #caller_location, disable_location := false) {
-    when ENABLE_LOG {
-        context.temp_allocator = tmp_alloc
+	when ENABLE_LOG {
+		context.temp_allocator = tmp_alloc
 
-        file := loc.file_path
-        colors := COLORS
-        levels := LEVELS
-        if !LOG_FULL_PATH {
-            dir, err := os.get_executable_directory(context.temp_allocator)
-            if err == nil {
-                dir = fmt.tprintf("%v/", dir)
-                file, _ = strings.remove(loc.file_path, dir, 1, allocator = context.temp_allocator)
-            }
-        }
+		file := loc.file_path
+		colors := COLORS
+		levels := LEVELS
+		if !LOG_FULL_PATH {
+			dir, err := os.get_executable_directory(context.temp_allocator)
+			if err == nil {
+				dir = fmt.tprintf("%v/", dir)
+				file, _ = strings.remove(loc.file_path, dir, 1, allocator = context.temp_allocator)
+			}
+		}
 
-        format := ""
-        if disable_location {
-            format = fmt.tprintf("\033[%vm%v %v\033[0m", colors[level], levels[level], msg)
-        } else {
-            format = fmt.tprintf("[%v:%v] \033[%vm%v %v\033[5m", file, loc.line, colors[level], levels[level], msg)
-        }
+		format := ""
+		if disable_location {
+			format = fmt.tprintf("\033[%vm%v %v\033[0m", colors[level], levels[level], msg)
+		} else {
+			format = fmt.tprintf("[%v:%v] \033[%vm%v %v\033[5m", file, loc.line, colors[level], levels[level], msg)
+		}
 
-        if new_line {
-            fmt.printf("%v\n", format)
-        } else {
-            fmt.print(format)
-        }
+		if new_line {
+			fmt.printf("%v\n", format)
+		} else {
+			fmt.print(format)
+		}
 
-        if level >= LOG.FATAL do os.exit(1)
-    }
+		if level >= LOG.FATAL do os.exit(1)
+	}
 }
 
 to_string :: proc(value: any) -> string { return  fmt.tprintf("%v", value) }
 
 println :: proc(msg: any, level := LOG.DEBUG, loc := #caller_location, disable_location := false) {
-    print(msg, level, true, loc, disable_location)
+	print(msg, level, true, loc, disable_location)
 }
 
 printf :: proc(level: LOG, format: string, args: ..any, loc := #caller_location, disable_location := false) {
-    context.temp_allocator = tmp_alloc
-    print(fmt.tprintf(format, ..args), level, false, loc, disable_location)
+	context.temp_allocator = tmp_alloc
+	print(fmt.tprintf(format, ..args), level, false, loc, disable_location)
 }
 
 assert_msg :: proc(condition: bool, msg: string, loc := #caller_location, disable_location := false) {
-    if !condition do println(msg, LOG.FATAL, loc, disable_location)
+	if !condition do println(msg, LOG.FATAL, loc, disable_location)
 }
 
 TRACE :: proc(msg: ..any, loc := #caller_location, disable_location := false) {
-    println(msg, LOG.TRACE, loc, disable_location)
+	println(msg, LOG.TRACE, loc, disable_location)
 }
 
 DEBUG :: proc(msg: ..any, loc := #caller_location, disable_location := false) {
-    if len(msg) == 1 {
-        println(msg[0], LOG.DEBUG, loc, disable_location)
-        return
-    }
+	if len(msg) == 1 {
+		println(msg[0], LOG.DEBUG, loc, disable_location)
+		return
+	}
 
-    println(msg, LOG.DEBUG, loc, disable_location)
+	println(msg, LOG.DEBUG, loc, disable_location)
 }
 
 INFO :: proc(msg: ..any, loc := #caller_location, disable_location := false) {
-    if len(msg) == 1 {
-        println(msg[0], LOG.INFO, loc, disable_location)
-        return
-    }
+	if len(msg) == 1 {
+		println(msg[0], LOG.INFO, loc, disable_location)
+		return
+	}
 
-    println(msg, LOG.INFO, loc, disable_location)
+	println(msg, LOG.INFO, loc, disable_location)
 }
 
 WARN :: proc(msg: ..any, loc := #caller_location, disable_location := false) {
-    if len(msg) == 1 {
-        println(msg[0], LOG.WARN, loc, disable_location)
-        return
-    }
+	if len(msg) == 1 {
+		println(msg[0], LOG.WARN, loc, disable_location)
+		return
+	}
 
-    println(msg, LOG.WARN, loc, disable_location)
+	println(msg, LOG.WARN, loc, disable_location)
 }
 
 ERROR :: proc(msg: ..any, loc := #caller_location, disable_location := false) {
-    if len(msg) == 1 {
-        println(msg[0], LOG.ERROR, loc, disable_location)
-        return
-    }
+	if len(msg) == 1 {
+		println(msg[0], LOG.ERROR, loc, disable_location)
+		return
+	}
 
-    println(msg, LOG.ERROR, loc, disable_location)
+	println(msg, LOG.ERROR, loc, disable_location)
 }
 
 FATAL :: proc(msg: ..any, loc := #caller_location, disable_location := false) {
-    if len(msg) == 1 {
-        println(msg[0], LOG.FATAL, loc, disable_location)
-        os.exit(1)
-    }
+	if len(msg) == 1 {
+		println(msg[0], LOG.FATAL, loc, disable_location)
+		os.exit(1)
+	}
 
-    println(msg, LOG.FATAL, loc, disable_location)
-    os.exit(1)
+	println(msg, LOG.FATAL, loc, disable_location)
+	os.exit(1)
 }
 
 TRACEF :: proc(format: string, args: ..any, loc := #caller_location, disable_location := false) {
-    context.temp_allocator = tmp_alloc
-    print(fmt.tprintf(format, ..args), LOG.TRACE, false, loc, disable_location)
+	context.temp_allocator = tmp_alloc
+	print(fmt.tprintf(format, ..args), LOG.TRACE, false, loc, disable_location)
 }
 
 DEBUGF :: proc(format: string, args: ..any, loc := #caller_location, disable_location := false) {
-    context.temp_allocator = tmp_alloc
-    print(fmt.tprintf(format, ..args), LOG.DEBUG, false, loc, disable_location)
+	context.temp_allocator = tmp_alloc
+	print(fmt.tprintf(format, ..args), LOG.DEBUG, false, loc, disable_location)
 }
 
 INFOF :: proc(format: string, args: ..any, loc := #caller_location, disable_location := false) {
-    context.temp_allocator = tmp_alloc
-    print(fmt.tprintf(format, ..args), LOG.INFO, false, loc, disable_location)
+	context.temp_allocator = tmp_alloc
+	print(fmt.tprintf(format, ..args), LOG.INFO, false, loc, disable_location)
 }
 
 WARNF :: proc(format: string, args: ..any, loc := #caller_location, disable_location := false) {
-    context.temp_allocator = tmp_alloc
-    print(fmt.tprintf(format, ..args), LOG.WARN, false, loc, disable_location)
+	context.temp_allocator = tmp_alloc
+	print(fmt.tprintf(format, ..args), LOG.WARN, false, loc, disable_location)
 }
 
 ERRORF :: proc(format: string, args: ..any, loc := #caller_location, disable_location := false) {
-    context.temp_allocator = tmp_alloc
-    print(fmt.tprintf(format, ..args), LOG.ERROR, false, loc, disable_location)
+	context.temp_allocator = tmp_alloc
+	print(fmt.tprintf(format, ..args), LOG.ERROR, false, loc, disable_location)
 }
 
 FATALF :: proc(format: string, args: ..any, loc := #caller_location, disable_location := false) {
-    context.temp_allocator = tmp_alloc
-    print(fmt.tprintf(format, ..args), LOG.FATAL, false, loc, disable_location)
-    os.exit(1)
+	context.temp_allocator = tmp_alloc
+	print(fmt.tprintf(format, ..args), LOG.FATAL, false, loc, disable_location)
+	os.exit(1)
 }
 
 enum_to_string :: proc(value: any, loc := #caller_location) -> string {
-    v, ok := fmt.enum_value_to_string(value)
-    if !ok {
-        WARNF("invalid enum: %v", value, loc = loc)
-        return ""
-    }
+	v, ok := fmt.enum_value_to_string(value)
+	if !ok {
+		WARNF("invalid enum: %v", value, loc = loc)
+		return ""
+	}
 
-    return  v
+	return  v
 }

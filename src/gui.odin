@@ -14,741 +14,741 @@ import "core:strings"
 
 // @(private="file")
 // GuiGlobalUbo :: struct {
-//     projection:   mat4,
-//     view:         mat4,
-//     inverse_view: mat4,
+//	 projection:   mat4,
+//	 view:		 mat4,
+//	 inverse_view: mat4,
 // }
 
 gui_init :: proc() {
-    pipeline.shader_filepath = "assets/shaders/gui.wgsl"
-    device_get_default_pipeline(&pipeline)
+	pipeline.shader_filepath = "assets/shaders/gui.wgsl"
+	device_get_default_pipeline(&pipeline)
 
-    pipeline.pipeline_descriptor.label = "gui pipeline"
-    // TODO: disable depth for only transparent objs
-    pipeline.depth_stencil_state.depthWriteEnabled = .False
+	pipeline.pipeline_descriptor.label = "gui pipeline"
+	// TODO: disable depth for only transparent objs
+	pipeline.depth_stencil_state.depthWriteEnabled = .False
 
-    vertex_attributes := [2]wgpu.VertexAttribute{}
-    vertex_attributes[0].shaderLocation = 0
-    vertex_attributes[0].format = .Float32x3
-    vertex_attributes[0].offset = 0
+	vertex_attributes := [2]wgpu.VertexAttribute{}
+	vertex_attributes[0].shaderLocation = 0
+	vertex_attributes[0].format = .Float32x3
+	vertex_attributes[0].offset = 0
 
-    vertex_attributes[1].shaderLocation = 1
-    vertex_attributes[1].format = .Float32x3
-    vertex_attributes[1].offset = size_of(vec3)
+	vertex_attributes[1].shaderLocation = 1
+	vertex_attributes[1].format = .Float32x3
+	vertex_attributes[1].offset = size_of(vec3)
 
-    vertex_buffer_layout := wgpu.VertexBufferLayout{
-        arrayStride = 2 * size_of(vec3),
-        stepMode = .Vertex,
-        attributeCount = len(vertex_attributes),
-        attributes = &vertex_attributes[0],
-    }
+	vertex_buffer_layout := wgpu.VertexBufferLayout{
+		arrayStride = 2 * size_of(vec3),
+		stepMode = .Vertex,
+		attributeCount = len(vertex_attributes),
+		attributes = &vertex_attributes[0],
+	}
 
-    pipeline.pipeline_descriptor.vertex.bufferCount = 1
-    pipeline.pipeline_descriptor.vertex.buffers = &vertex_buffer_layout
+	pipeline.pipeline_descriptor.vertex.bufferCount = 1
+	pipeline.pipeline_descriptor.vertex.buffers = &vertex_buffer_layout
 
-    global_bind_group_layout_entry: [1]wgpu.BindGroupLayoutEntry
-    global_bind_group_layout_entry[0].binding = 0
-    global_bind_group_layout_entry[0].visibility = { .Vertex }
-    global_bind_group_layout_entry[0].buffer.type = .Uniform
-    global_bind_group_layout_entry[0].buffer.minBindingSize = size_of(GlobalUbo)
+	global_bind_group_layout_entry: [1]wgpu.BindGroupLayoutEntry
+	global_bind_group_layout_entry[0].binding = 0
+	global_bind_group_layout_entry[0].visibility = { .Vertex }
+	global_bind_group_layout_entry[0].buffer.type = .Uniform
+	global_bind_group_layout_entry[0].buffer.minBindingSize = size_of(GlobalUbo)
 
-    gui_bind_group_layout_entry: [3]wgpu.BindGroupLayoutEntry
-    gui_bind_group_layout_entry[0].binding = 0
-    gui_bind_group_layout_entry[0].visibility = { .Vertex, .Fragment }
-    gui_bind_group_layout_entry[0].buffer.type = .Uniform
-    gui_bind_group_layout_entry[0].buffer.minBindingSize = size_of(GuiUbo)
+	gui_bind_group_layout_entry: [3]wgpu.BindGroupLayoutEntry
+	gui_bind_group_layout_entry[0].binding = 0
+	gui_bind_group_layout_entry[0].visibility = { .Vertex, .Fragment }
+	gui_bind_group_layout_entry[0].buffer.type = .Uniform
+	gui_bind_group_layout_entry[0].buffer.minBindingSize = size_of(GuiUbo)
 
-    gui_bind_group_layout_entry[1].binding = 1
-    gui_bind_group_layout_entry[1].visibility = { .Fragment }
-    gui_bind_group_layout_entry[1].texture.sampleType = .Float
-    gui_bind_group_layout_entry[1].texture.viewDimension = ._2D
+	gui_bind_group_layout_entry[1].binding = 1
+	gui_bind_group_layout_entry[1].visibility = { .Fragment }
+	gui_bind_group_layout_entry[1].texture.sampleType = .Float
+	gui_bind_group_layout_entry[1].texture.viewDimension = ._2D
 
-    gui_bind_group_layout_entry[2].binding = 2
-    gui_bind_group_layout_entry[2].visibility = { .Fragment }
-    gui_bind_group_layout_entry[2].sampler.type = .Filtering
+	gui_bind_group_layout_entry[2].binding = 2
+	gui_bind_group_layout_entry[2].visibility = { .Fragment }
+	gui_bind_group_layout_entry[2].sampler.type = .Filtering
 
-    bind_group_layout_descriptor: [2]wgpu.BindGroupLayoutDescriptor
-    bind_group_layout_descriptor[0].label = "gui global bind group layout"
-    bind_group_layout_descriptor[0].entryCount = len(global_bind_group_layout_entry)
-    bind_group_layout_descriptor[0].entries = &global_bind_group_layout_entry[0]
+	bind_group_layout_descriptor: [2]wgpu.BindGroupLayoutDescriptor
+	bind_group_layout_descriptor[0].label = "gui global bind group layout"
+	bind_group_layout_descriptor[0].entryCount = len(global_bind_group_layout_entry)
+	bind_group_layout_descriptor[0].entries = &global_bind_group_layout_entry[0]
 
-    bind_group_layout_descriptor[1].label = "gui bind group layout"
-    bind_group_layout_descriptor[1].entryCount = len(gui_bind_group_layout_entry)
-    bind_group_layout_descriptor[1].entries = &gui_bind_group_layout_entry[0]
+	bind_group_layout_descriptor[1].label = "gui bind group layout"
+	bind_group_layout_descriptor[1].entryCount = len(gui_bind_group_layout_entry)
+	bind_group_layout_descriptor[1].entries = &gui_bind_group_layout_entry[0]
 
-    gui_bind_group_layouts[0] = wgpu.DeviceCreateBindGroupLayout(device.device, &bind_group_layout_descriptor[0])
-    gui_bind_group_layouts[1] = wgpu.DeviceCreateBindGroupLayout(device.device, &bind_group_layout_descriptor[1])
+	gui_bind_group_layouts[0] = wgpu.DeviceCreateBindGroupLayout(device.device, &bind_group_layout_descriptor[0])
+	gui_bind_group_layouts[1] = wgpu.DeviceCreateBindGroupLayout(device.device, &bind_group_layout_descriptor[1])
 
-    gui_global_buffer = device_create_buffer({ .CopyDst, .Uniform }, size_of(GlobalUbo), label="gui global buffer")
+	gui_global_buffer = device_create_buffer({ .CopyDst, .Uniform }, size_of(GlobalUbo), label="gui global buffer")
 
-    // BIND GROUP
-    binding: [1]wgpu.BindGroupEntry
-    binding[0].binding = 0
-    binding[0].offset = 0
-    binding[0].buffer = gui_global_buffer
-    binding[0].size = size_of(GlobalUbo)
+	// BIND GROUP
+	binding: [1]wgpu.BindGroupEntry
+	binding[0].binding = 0
+	binding[0].offset = 0
+	binding[0].buffer = gui_global_buffer
+	binding[0].size = size_of(GlobalUbo)
 
-    bind_group_descriptor := wgpu.BindGroupDescriptor{
-        label = "gui bind group descriptor",
-        layout = gui_bind_group_layouts[0],
-        entryCount = len(binding),
-        entries = &binding[0],
-    }
+	bind_group_descriptor := wgpu.BindGroupDescriptor{
+		label = "gui bind group descriptor",
+		layout = gui_bind_group_layouts[0],
+		entryCount = len(binding),
+		entries = &binding[0],
+	}
 
-    pipeline.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
+	pipeline.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
 
-    // PIPELINE
-    pipeline.layout_descriptor = wgpu.PipelineLayoutDescriptor{
-        label = "gui render pipeline layout",
-        bindGroupLayoutCount = len(gui_bind_group_layouts),
-        bindGroupLayouts = &gui_bind_group_layouts[0],
-    }
+	// PIPELINE
+	pipeline.layout_descriptor = wgpu.PipelineLayoutDescriptor{
+		label = "gui render pipeline layout",
+		bindGroupLayoutCount = len(gui_bind_group_layouts),
+		bindGroupLayouts = &gui_bind_group_layouts[0],
+	}
 
-    pipeline.pipeline_descriptor.layout = wgpu.DeviceCreatePipelineLayout(device.device, &pipeline.layout_descriptor)
-    pipeline.pipeline_handle = wgpu.DeviceCreateRenderPipeline(device.device, &pipeline.pipeline_descriptor)
+	pipeline.pipeline_descriptor.layout = wgpu.DeviceCreatePipelineLayout(device.device, &pipeline.layout_descriptor)
+	pipeline.pipeline_handle = wgpu.DeviceCreateRenderPipeline(device.device, &pipeline.pipeline_descriptor)
 }
 
 gui_destroy :: proc() {
-    for layout in gui_bind_group_layouts {
-        wgpu.BindGroupLayoutRelease(layout)
-    }
+	for layout in gui_bind_group_layouts {
+		wgpu.BindGroupLayoutRelease(layout)
+	}
 
-    wgpu.RenderPipelineRelease(pipeline.pipeline_handle)
-    wgpu.BufferDestroy(gui_global_buffer)
-    wgpu.BufferRelease(gui_global_buffer)
+	wgpu.RenderPipelineRelease(pipeline.pipeline_handle)
+	wgpu.BufferDestroy(gui_global_buffer)
+	wgpu.BufferRelease(gui_global_buffer)
 }
 
 gui_draw :: proc(render_pass: wgpu.RenderPassEncoder, queue: wgpu.Queue, global_ubo: GlobalUbo) {
-    wgpu.RenderPassEncoderSetPipeline(render_pass, pipeline.pipeline_handle)
-    wgpu.RenderPassEncoderSetBindGroup(render_pass, 0, pipeline.bind_group)
+	wgpu.RenderPassEncoderSetPipeline(render_pass, pipeline.pipeline_handle)
+	wgpu.RenderPassEncoderSetBindGroup(render_pass, 0, pipeline.bind_group)
 
-    aspect := window_get_viewport_aspect()
-    ortho_proj := get_orthographic_projection(-aspect, aspect, -1, 1, -1, 1)
+	aspect := window_get_viewport_aspect()
+	ortho_proj := get_orthographic_projection(-aspect, aspect, -1, 1, -1, 1)
 
-    ubo := GlobalUbo{}
-    ubo.projection = ortho_proj
-    ubo.view = mat4_identity
+	ubo := GlobalUbo{}
+	ubo.projection = ortho_proj
+	ubo.view = mat4_identity
 
-    // TODO: make an ubo struct for guis
-    wgpu.QueueWriteBuffer(queue, gui_global_buffer, 0, &ubo, size_of(GlobalUbo))
+	// TODO: make an ubo struct for guis
+	wgpu.QueueWriteBuffer(queue, gui_global_buffer, 0, &ubo, size_of(GlobalUbo))
 
-    //guis := get_guis()
-    gui_indices := get_sorted_gui_indices()
+	//guis := get_guis()
+	gui_indices := get_sorted_gui_indices()
 
-    for gui_idx, i in gui_indices {
-        if gui_idx.x < 0 do continue
+	for gui_idx, i in gui_indices {
+		if gui_idx.x < 0 do continue
 
-        id := get_obj_id_from_comp_id(int(gui_idx.x), .GUI)
-        g := get_gui(id)
+		id := get_obj_id_from_comp_id(int(gui_idx.x), .GUI)
+		g := get_gui(id)
 
-        if g.ubo == nil do return
+		if g.ubo == nil do return
 
-        go := get_game_obj(id)
-        if !go.enabled do continue
+		go := get_game_obj(id)
+		if !go.enabled do continue
 
-        original_position := go.position
-        original_rotation := go.rotation
-        original_scale_z  := go.scale.z
+		original_position := go.position
+		original_rotation := go.rotation
+		original_scale_z  := go.scale.z
 
-        if go.parent != INVALID_ID {
-            parent := get_game_obj(go.parent)
-            go.position += parent.position
-            go.rotation = parent.rotation * go.rotation
-            go.scale.z *= parent.scale.z
-        }
+		if go.parent != INVALID_ID {
+			parent := get_game_obj(go.parent)
+			go.position += parent.position
+			go.rotation = parent.rotation * go.rotation
+			go.scale.z *= parent.scale.z
+		}
 
-        go.position.z = 0
-        model_matrix := update_matrix(id, is_2d = true).model
-        go.position.z = original_position.z
+		go.position.z = 0
+		model_matrix := update_matrix(id, is_2d = true).model
+		go.position.z = original_position.z
 
-        if go.parent != INVALID_ID {
-            go.position = original_position
-            go.rotation = original_rotation
-            go.scale.z = original_scale_z
-        }
+		if go.parent != INVALID_ID {
+			go.position = original_position
+			go.rotation = original_rotation
+			go.scale.z = original_scale_z
+		}
 
-        is_font : u32 = 0
-        if g.gui_type == .TEXT {
-            is_font = 1
+		is_font : u32 = 0
+		if g.gui_type == .TEXT {
+			is_font = 1
 
-            // do not render empty text
-            if len(get_text_component(id).text) == 0 do continue
-        }
+			// do not render empty text
+			if len(get_text_component(id).text) == 0 do continue
+		}
 
-        ui_ubo := GuiUbo{
-            model = model_matrix,
-            view = mat4_identity,
-            is_font = is_font,
-            color = g.color,
-        }
+		ui_ubo := GuiUbo{
+			model = model_matrix,
+			view = mat4_identity,
+			is_font = is_font,
+			color = g.color,
+		}
 
-        if g.gui_type == .GAME_OBJECT do ui_ubo.view = global_ubo.view
+		if g.gui_type == .GAME_OBJECT do ui_ubo.view = global_ubo.view
 
-        wgpu.RenderPassEncoderSetBindGroup(render_pass, 1, g.bind_group)
-        wgpu.QueueWriteBuffer(queue, g.ubo, 0, &ui_ubo, size_of(GuiUbo))
+		wgpu.RenderPassEncoderSetBindGroup(render_pass, 1, g.bind_group)
+		wgpu.QueueWriteBuffer(queue, g.ubo, 0, &ui_ubo, size_of(GuiUbo))
 
-        wgpu.RenderPassEncoderSetVertexBuffer(render_pass, 0, g.vertex_buffer, 0, g.vertex_buffer_size)
-        wgpu.RenderPassEncoderSetIndexBuffer(render_pass, g.index_buffer, .Uint32, 0, g.index_buffer_size)
-        wgpu.RenderPassEncoderDrawIndexed(render_pass, g.index_count, 1, 0, 0, 0)
-    }
+		wgpu.RenderPassEncoderSetVertexBuffer(render_pass, 0, g.vertex_buffer, 0, g.vertex_buffer_size)
+		wgpu.RenderPassEncoderSetIndexBuffer(render_pass, g.index_buffer, .Uint32, 0, g.index_buffer_size)
+		wgpu.RenderPassEncoderDrawIndexed(render_pass, g.index_count, 1, 0, 0, 0)
+	}
 }
 
 gui_cursor_event :: proc(event: sdl3.MouseMotionEvent) {
-    guis := get_guis()
-    cursor := vec2{ event.x, event.y }
+	guis := get_guis()
+	cursor := vec2{ event.x, event.y }
 
-    for &g, i in guis {
-        if g.event_callback == nil do continue
+	for &g, i in guis {
+		if g.event_callback == nil do continue
 
-        id := get_obj_id_from_comp_id(i, Components.GUI)
-        obj := get_game_obj(id)
+		id := get_obj_id_from_comp_id(i, Components.GUI)
+		obj := get_game_obj(id)
 
-        e := g.last_event
-        e.id = id
-        last_event_hover := e.hovering
+		e := g.last_event
+		e.id = id
+		last_event_hover := e.hovering
 
-        e.released = false
-        e.hovering = false
-        on_hover := is_mouse_on_gui(obj, cursor)
+		e.released = false
+		e.hovering = false
+		on_hover := is_mouse_on_gui(obj, cursor)
 
-        if last_event_hover && !on_hover {
-            e.hovering = false
-            g.last_event = e
-            g.event_callback(e)
-            return
-        }
+		if last_event_hover && !on_hover {
+			e.hovering = false
+			g.last_event = e
+			g.event_callback(e)
+			return
+		}
 
-        if !last_event_hover && on_hover {
-            e.hovering = true
-            g.last_event = e
-            g.event_callback(e)
-            return
-        }
-    }
+		if !last_event_hover && on_hover {
+			e.hovering = true
+			g.last_event = e
+			g.event_callback(e)
+			return
+		}
+	}
 }
 
 gui_mouse :: proc(event: sdl3.MouseButtonEvent) {
-    guis := get_guis()
-    cursor := vec2{ event.x, event.y }
+	guis := get_guis()
+	cursor := vec2{ event.x, event.y }
 
-    for &g, i in guis {
-        if g.event_callback == nil do continue
+	for &g, i in guis {
+		if g.event_callback == nil do continue
 
-        id := get_obj_id_from_comp_id(i, Components.GUI)
-        obj := get_game_obj(id)
+		id := get_obj_id_from_comp_id(i, Components.GUI)
+		obj := get_game_obj(id)
 
-        e := g.last_event
-        e.id = id
+		e := g.last_event
+		e.id = id
 
-        if is_mouse_on_gui(obj, cursor) {
-            if event.button == sdl3.BUTTON_LEFT {
-                if event.down {
-                    e.holding = true
-                    e.pressed = true
-                    e.focused = true
-                    e.released = false
-                } else {
-                    if g.last_event.pressed do e.toggle = !e.toggle
-                }
-            }
+		if is_mouse_on_gui(obj, cursor) {
+			if event.button == sdl3.BUTTON_LEFT {
+				if event.down {
+					e.holding = true
+					e.pressed = true
+					e.focused = true
+					e.released = false
+				} else {
+					if g.last_event.pressed do e.toggle = !e.toggle
+				}
+			}
 
-        } else if event.button == sdl3.BUTTON_LEFT && event.down {
-            e.focused = false
-        }
+		} else if event.button == sdl3.BUTTON_LEFT && event.down {
+			e.focused = false
+		}
 
-        e.released = g.last_event.pressed
+		e.released = g.last_event.pressed
 
-        if event.button == sdl3.BUTTON_LEFT && !event.down {
-            e.pressed = false
-            e.holding = false
-        }
+		if event.button == sdl3.BUTTON_LEFT && !event.down {
+			e.pressed = false
+			e.holding = false
+		}
 
-        g.last_event = e
-        if e.pressed || e.released || e.holding do g.event_callback(e)
-    }
+		g.last_event = e
+		if e.pressed || e.released || e.holding do g.event_callback(e)
+	}
 }
 
 gui_input :: proc(event: sdl3.KeyboardEvent) {
-    guis := get_guis()
+	guis := get_guis()
 
-    for &g, i in guis {
-        if g.event_callback == nil do continue
+	for &g, i in guis {
+		if g.event_callback == nil do continue
 
-        id := get_obj_id_from_comp_id(i, Components.GUI)
+		id := get_obj_id_from_comp_id(i, Components.GUI)
 
-        e := g.last_event
-        e.id = id
+		e := g.last_event
+		e.id = id
 
-        if e.focused {
-            e.key = event.key
-            g.event_callback(e)
-        }
-    }
+		if e.focused {
+			e.key = event.key
+			g.event_callback(e)
+		}
+	}
 }
 
 gui_set_render_index :: proc(id: id_t, index: u32) {
-    get_game_obj(id).position.z = f32(index)
-    set_render_index(id)
+	get_game_obj(id).position.z = f32(index)
+	set_render_index(id)
 }
 
 gui_create_bind_group :: proc(id: id_t) {
-    gui := get_gui(id)
-    texture := get_texture(id)
+	gui := get_gui(id)
+	texture := get_texture(id)
 
-    entries: [3]wgpu.BindGroupEntry
-    entries[0].binding = 0
-    entries[0].buffer = gui.ubo
-    entries[0].size = size_of(GuiUbo)
+	entries: [3]wgpu.BindGroupEntry
+	entries[0].binding = 0
+	entries[0].buffer = gui.ubo
+	entries[0].size = size_of(GuiUbo)
 
-    // TEXTURE
-    entries[1].textureView = texture.texture_view;
-    entries[1].binding = 1
+	// TEXTURE
+	entries[1].textureView = texture.texture_view;
+	entries[1].binding = 1
 
-    // SAMPLER
-    entries[2].sampler = texture.sampler
-    entries[2].binding = 2
+	// SAMPLER
+	entries[2].sampler = texture.sampler
+	entries[2].binding = 2
 
-    bind_group_descriptor := wgpu.BindGroupDescriptor{
-        label = strings.concatenate({ "gui quad: (", to_string(id), ") bind group" }, context.temp_allocator),
-        entryCount = len(entries),
-        entries = &entries[0],
-        layout = gui_bind_group_layouts[1],
-    }
+	bind_group_descriptor := wgpu.BindGroupDescriptor{
+		label = strings.concatenate({ "gui quad: (", to_string(id), ") bind group" }, context.temp_allocator),
+		entryCount = len(entries),
+		entries = &entries[0],
+		layout = gui_bind_group_layouts[1],
+	}
 
-    gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
+	gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
 }
 
 gui_create_quad :: proc(texture_filepath: string = "", event_callback: proc(event: GuiEvent) = nil, color := vec4_one) -> ^GameObject {
-    obj := new_empty()
-    id := obj.id
+	obj := new_empty()
+	id := obj.id
 
-    label := strings.concatenate({ "gui quad: (", to_string(id), ") ubo" }, context.temp_allocator)
+	label := strings.concatenate({ "gui quad: (", to_string(id), ") ubo" }, context.temp_allocator)
 
-    gui := new_gui(id)
-    gui.gui_type = GuiType.IMAGE
-    gui.ubo = device_create_buffer({ .CopyDst, .Uniform }, size_of(GuiUbo), label=label)
-    gui.color = color
+	gui := new_gui(id)
+	gui.gui_type = GuiType.IMAGE
+	gui.ubo = device_create_buffer({ .CopyDst, .Uniform }, size_of(GuiUbo), label=label)
+	gui.color = color
 
-    mats := update_matrix(id)
-    ui_ubo := GuiUbo{
-        model = mats.model,
-        is_font = 0,
-        color = gui.color,
-    }
-    wgpu.QueueWriteBuffer(device.queue, gui.ubo, 0, &ui_ubo, size_of(GuiUbo))
+	mats := update_matrix(id)
+	ui_ubo := GuiUbo{
+		model = mats.model,
+		is_font = 0,
+		color = gui.color,
+	}
+	wgpu.QueueWriteBuffer(device.queue, gui.ubo, 0, &ui_ubo, size_of(GuiUbo))
 
-    if event_callback != nil do gui.event_callback = event_callback
+	if event_callback != nil do gui.event_callback = event_callback
 
-    vertex_data := [?]f32{
-        // pos         uv
-       -1,  1, 0,    0, 1, 0,
-        1,  1, 0,    1, 1, 0,
-       -1, -1, 0,    0, 0, 0,
-        1, -1, 0,    1, 0, 0,
-    }
+	vertex_data := [?]f32{
+		// pos		 uv
+	   -1,  1, 0,	0, 1, 0,
+		1,  1, 0,	1, 1, 0,
+	   -1, -1, 0,	0, 0, 0,
+		1, -1, 0,	1, 0, 0,
+	}
 
-    index_data  := [?]u32{ 1, 2, 0, 1, 3, 2 }
+	index_data  := [?]u32{ 1, 2, 0, 1, 3, 2 }
 
-    gui.vertex_buffer_size = size_of(f32) * len(vertex_data)
-    gui.index_buffer_size = size_of(u32) * len(index_data)
-    gui.index_count = len(index_data)
+	gui.vertex_buffer_size = size_of(f32) * len(vertex_data)
+	gui.index_buffer_size = size_of(u32) * len(index_data)
+	gui.index_count = len(index_data)
 
-    label = strings.concatenate({ "gui quad: (", to_string(id), ") vertex buffer" }, context.temp_allocator)
+	label = strings.concatenate({ "gui quad: (", to_string(id), ") vertex buffer" }, context.temp_allocator)
 
-    gui.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, gui.vertex_buffer_size, label=label)
-    wgpu.QueueWriteBuffer(device.queue, gui.vertex_buffer, 0, &vertex_data, uint(gui.vertex_buffer_size))
+	gui.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, gui.vertex_buffer_size, label=label)
+	wgpu.QueueWriteBuffer(device.queue, gui.vertex_buffer, 0, &vertex_data, uint(gui.vertex_buffer_size))
 
-    label = strings.concatenate({ "gui quad: (", to_string(id), ") index buffer" }, context.temp_allocator)
+	label = strings.concatenate({ "gui quad: (", to_string(id), ") index buffer" }, context.temp_allocator)
 
-    gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
-    wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &index_data, uint(gui.index_buffer_size))
+	gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
+	wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &index_data, uint(gui.index_buffer_size))
 
-    filepath := texture_filepath
-    if len(filepath) == 0 do filepath = "assets/models/1x1.png"
+	filepath := texture_filepath
+	if len(filepath) == 0 do filepath = "assets/models/1x1.png"
 
-    texture := load_texture_image(id, filepath)
-    obj.scale.x = f32(texture.width)
-    obj.scale.y = f32(texture.height)
+	texture := load_texture_image(id, filepath)
+	obj.scale.x = f32(texture.width)
+	obj.scale.y = f32(texture.height)
 
-    gui_create_bind_group(id)
+	gui_create_bind_group(id)
 
-    return obj
+	return obj
 }
 
 is_point_in_polygon :: proc(point: vec2, polygon: []vec2) -> bool {
-    inside := false
-    vert_count := len(polygon)
+	inside := false
+	vert_count := len(polygon)
 
-    for i := 0; i < vert_count; i += 1 {
-        j := (i - 1 + vert_count) % vert_count
+	for i := 0; i < vert_count; i += 1 {
+		j := (i - 1 + vert_count) % vert_count
 
-        a := (polygon[i].y > point.y) != (polygon[j].y > point.y)
+		a := (polygon[i].y > point.y) != (polygon[j].y > point.y)
 
-        if polygon[j].y != polygon[i].y {
-            b := point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x
+		if polygon[j].y != polygon[i].y {
+			b := point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x
 
-            if a && b do inside = !inside
+			if a && b do inside = !inside
 
-        } else {
-            if point.y == polygon[i].y && (point.x >= min(polygon[i].x, polygon[j].x)) && (point.x <= max(polygon[i].x, polygon[j].x)) do return true
-        }
-    }
+		} else {
+			if point.y == polygon[i].y && (point.x >= min(polygon[i].x, polygon[j].x)) && (point.x <= max(polygon[i].x, polygon[j].x)) do return true
+		}
+	}
 
-    return inside
+	return inside
 }
 
 is_mouse_on_gui :: proc(obj: ^GameObject, cursor_pos: vec2) -> bool {
-    if !is_cursor_enabled() do return false
+	if !is_cursor_enabled() do return false
 
-    view := window_get_fixed_aspect_viewport()
-    app_size := window_get_window_size()
+	view := window_get_fixed_aspect_viewport()
+	app_size := window_get_window_size()
 
-    cursor := (((cursor_pos / vec2{ view.w, view.h }) - 0.5) * 2) * app_size
+	cursor := (((cursor_pos / vec2{ view.w, view.h }) - 0.5) * 2) * app_size
 
-    // setting cursor position to be the same independent screen size
-    if view.x > 0 {
-        cursor.x = ((((cursor_pos.x - view.x) / view.w -0.5) * 2) * app_size.x)
-        cursor.y = -cursor.y
-    } else {
-        cursor.y = -((((cursor_pos.y - view.y) / view.h -0.5) * 2) * app_size.y)
-    }
+	// setting cursor position to be the same independent screen size
+	if view.x > 0 {
+		cursor.x = ((((cursor_pos.x - view.x) / view.w -0.5) * 2) * app_size.x)
+		cursor.y = -cursor.y
+	} else {
+		cursor.y = -((((cursor_pos.y - view.y) / view.h -0.5) * 2) * app_size.y)
+	}
 
-    corners: []vec2
-    corners = make([]vec2, 4, allocator = context.temp_allocator)
+	corners: []vec2
+	corners = make([]vec2, 4, allocator = context.temp_allocator)
 
-    pos := vec2{ obj.position.x , obj.position.y }
+	pos := vec2{ obj.position.x , obj.position.y }
 
-    size := obj.scale * obj.scale.z
-    rot := -get_rotation_euler(obj.id).z
+	size := obj.scale * obj.scale.z
+	rot := -get_rotation_euler(obj.id).z
 
-    // points
-    corners[0] = vec2{ -size.x,  size.y } // tl
-    corners[1] = vec2{  size.x,  size.y } // tr
-    corners[2] = vec2{  size.x, -size.y } // br
-    corners[3] = vec2{ -size.x, -size.y } // bl
+	// points
+	corners[0] = vec2{ -size.x,  size.y } // tl
+	corners[1] = vec2{  size.x,  size.y } // tr
+	corners[2] = vec2{  size.x, -size.y } // br
+	corners[3] = vec2{ -size.x, -size.y } // bl
 
-    // rotate
-    for i := 0; i < len(corners); i += 1 {
-        x := corners[i].x
-        y := corners[i].y
-        angle := rot * math.RAD_PER_DEG
+	// rotate
+	for i := 0; i < len(corners); i += 1 {
+		x := corners[i].x
+		y := corners[i].y
+		angle := rot * math.RAD_PER_DEG
 
-        corners[i].x = x * math.cos(angle) - y * math.sin(angle)
-        corners[i].y = x * math.sin(angle) + y * math.cos(angle)
-    }
+		corners[i].x = x * math.cos(angle) - y * math.sin(angle)
+		corners[i].y = x * math.sin(angle) + y * math.cos(angle)
+	}
 
-    // position
-    corners[0] += pos
-    corners[1] += pos
-    corners[2] += pos
-    corners[3] += pos
+	// position
+	corners[0] += pos
+	corners[1] += pos
+	corners[2] += pos
+	corners[3] += pos
 
-    return is_point_in_polygon(cursor, corners)
+	return is_point_in_polygon(cursor, corners)
 }
 
 new_text :: proc(font_id: id_t, text: string, event_callback: proc(event: GuiEvent) = nil, color := vec4_one, loc:=#caller_location) -> ^GameObject {
-    obj := new_empty()
-    txt := new_text_component(obj.id)
-    txt.text = text
-    txt.atlas_id = font_id
+	obj := new_empty()
+	txt := new_text_component(obj.id)
+	txt.text = text
+	txt.atlas_id = font_id
 
-    label := strings.concatenate({ "text: (", to_string(obj.id), ") ubo" }, context.temp_allocator)
+	label := strings.concatenate({ "text: (", to_string(obj.id), ") ubo" }, context.temp_allocator)
 
-    gui := new_gui(obj.id)
-    gui.gui_type = GuiType.TEXT
-    gui.ubo = device_create_buffer({ .CopyDst, .Uniform }, size_of(GuiUbo), label=label)
-    gui.color = color
+	gui := new_gui(obj.id)
+	gui.gui_type = GuiType.TEXT
+	gui.ubo = device_create_buffer({ .CopyDst, .Uniform }, size_of(GuiUbo), label=label)
+	gui.color = color
 
-    mats := update_matrix(obj.id)
-    ui_ubo := GuiUbo{
-        model = mats.model,
-        is_font = 0,
-        color = gui.color,
-    }
-    wgpu.QueueWriteBuffer(device.queue, gui.ubo, 0, &ui_ubo, size_of(GuiUbo))
+	mats := update_matrix(obj.id)
+	ui_ubo := GuiUbo{
+		model = mats.model,
+		is_font = 0,
+		color = gui.color,
+	}
+	wgpu.QueueWriteBuffer(device.queue, gui.ubo, 0, &ui_ubo, size_of(GuiUbo))
 
-    if event_callback != nil do gui.event_callback = event_callback
+	if event_callback != nil do gui.event_callback = event_callback
 
-    texture := get_texture(txt.atlas_id)
+	texture := get_texture(txt.atlas_id)
 
-    entries: [3]wgpu.BindGroupEntry
-    entries[0].binding = 0
-    entries[0].buffer = gui.ubo
-    entries[0].size = size_of(GuiUbo)
+	entries: [3]wgpu.BindGroupEntry
+	entries[0].binding = 0
+	entries[0].buffer = gui.ubo
+	entries[0].size = size_of(GuiUbo)
 
-    // TEXTURE
-    entries[1].textureView = texture.texture_view;
-    entries[1].binding = 1
+	// TEXTURE
+	entries[1].textureView = texture.texture_view;
+	entries[1].binding = 1
 
-    // SAMPLER
-    entries[2].sampler = texture.sampler
-    entries[2].binding = 2
+	// SAMPLER
+	entries[2].sampler = texture.sampler
+	entries[2].binding = 2
 
-    bind_group_descriptor := wgpu.BindGroupDescriptor{
-        label = strings.concatenate({ "gui quad: (", to_string(obj.id), ") bind group" }, context.temp_allocator),
-        entryCount = len(entries),
-        entries = &entries[0],
-        layout = gui_bind_group_layouts[1],
-    }
+	bind_group_descriptor := wgpu.BindGroupDescriptor{
+		label = strings.concatenate({ "gui quad: (", to_string(obj.id), ") bind group" }, context.temp_allocator),
+		entryCount = len(entries),
+		entries = &entries[0],
+		layout = gui_bind_group_layouts[1],
+	}
 
-    gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
+	gui.bind_group = wgpu.DeviceCreateBindGroup(device.device, &bind_group_descriptor)
 
-    set_text(obj.id, txt.text)
+	set_text(obj.id, txt.text)
 
-    return obj
+	return obj
 }
 
 set_text :: proc(id: id_t, text: string, loc:=#caller_location) {
-    if len(text) == 0 do return
+	if len(text) == 0 do return
 
-    txt := get_text_component(id)
-    txt.text = text
+	txt := get_text_component(id)
+	txt.text = text
 
-    atlas := get_font_component(txt.atlas_id)
-    obj := get_game_obj(id)
-    obj.scale.xy = atlas.size.xy
+	atlas := get_font_component(txt.atlas_id)
+	obj := get_game_obj(id)
+	obj.scale.xy = atlas.size.xy
 
-    size := obj.scale.z
+	size := obj.scale.z
 
-    // vertex stride, 6 f32, vec3 pos and vec3 coords
-    vertices_data := make([]f32, len(text) * 2 * size_of(vec3), context.temp_allocator)
-    indices_data := make([]u32, len(text) * 6, context.temp_allocator)
+	// vertex stride, 6 f32, vec3 pos and vec3 coords
+	vertices_data := make([]f32, len(text) * 2 * size_of(vec3), context.temp_allocator)
+	indices_data := make([]u32, len(text) * 6, context.temp_allocator)
 
-    x: f32 = 0
-    y: f32 = 0
+	x: f32 = 0
+	y: f32 = 0
 
-    vertex_index := 0
-    idx_offset: u32 = 0
-    next_rect_idx: u32 = 0
+	vertex_index := 0
+	idx_offset: u32 = 0
+	next_rect_idx: u32 = 0
 
-    begin_idx := rune(atlas.begin_idx)
-    rect_indices_data := [?]u32{ 1, 2, 0, 1, 3, 2 }
+	begin_idx := rune(atlas.begin_idx)
+	rect_indices_data := [?]u32{ 1, 2, 0, 1, 3, 2 }
 
-    for ch, idx in text {
-        ch_byte_size := len(fmt.tprintf("%c", ch))
+	for ch, idx in text {
+		ch_byte_size := len(fmt.tprintf("%c", ch))
 
-        if ch_byte_size > 4 {
-            WARNF("Character `%v`, codepoint: %v, bytes: %v, not supported\n", ch, u32(ch), ch_byte_size)
-            continue
-        }
+		if ch_byte_size > 4 {
+			WARNF("Character `%v`, codepoint: %v, bytes: %v, not supported\n", ch, u32(ch), ch_byte_size)
+			continue
+		}
 
-        spc_advance := atlas.glyphs[' '].advance
+		spc_advance := atlas.glyphs[' '].advance
 
-        switch ch {
-            case 0: continue // nul
-            case '\n': { // new line
-                x = 0
-                y += spc_advance.y
-                continue
-            }
-            case '\t': { // tab
-                x += spc_advance.x * 4
-                continue
-            }
-            case ' ': { // space
-                x += spc_advance.x
-                continue
-            }
-        }
+		switch ch {
+			case 0: continue // nul
+			case '\n': { // new line
+				x = 0
+				y += spc_advance.y
+				continue
+			}
+			case '\t': { // tab
+				x += spc_advance.x * 4
+				continue
+			}
+			case ' ': { // space
+				x += spc_advance.x
+				continue
+			}
+		}
 
-        if ch < begin_idx {
-            WARNF("Character `%v`, codepoint: %v, from atlas: %v, is invalid\n", ch, u32(ch), atlas.filepath)
-            continue
-        }
+		if ch < begin_idx {
+			WARNF("Character `%v`, codepoint: %v, from atlas: %v, is invalid\n", ch, u32(ch), atlas.filepath)
+			continue
+		}
 
-        if int(ch - begin_idx) > len(atlas.glyphs) {
-            WARNF("Character `%v`, codepoint: %v, not found in atlas: %v, atlas is too small\n", ch, u32(ch), atlas.filepath)
-            continue
-        }
+		if int(ch - begin_idx) > len(atlas.glyphs) {
+			WARNF("Character `%v`, codepoint: %v, not found in atlas: %v, atlas is too small\n", ch, u32(ch), atlas.filepath)
+			continue
+		}
 
-        size := atlas.glyphs[ch - begin_idx].size / atlas.size
-        uv := atlas.glyphs[ch - begin_idx].uv
+		size := atlas.glyphs[ch - begin_idx].size / atlas.size
+		uv := atlas.glyphs[ch - begin_idx].uv
 
-        x0 := x
-        x1 := x + size.x
+		x0 := x
+		x1 := x + size.x
 
-        // negative to flip the y value
-        y0 := -(y + atlas.glyphs[ch - begin_idx].pos.y / atlas.size.y)
-        y1 := y0 - size.y
+		// negative to flip the y value
+		y0 := -(y + atlas.glyphs[ch - begin_idx].pos.y / atlas.size.y)
+		y1 := y0 - size.y
 
-        glyph_vertices := [4]vec3{
-            vec3{ x0, y0, 0 }, // top left
-            vec3{ x1, y0, 0 }, // top right
-            vec3{ x0, y1, 0 }, // bottom left
-            vec3{ x1, y1, 0 }, // bottom right
-        }
+		glyph_vertices := [4]vec3{
+			vec3{ x0, y0, 0 }, // top left
+			vec3{ x1, y0, 0 }, // top right
+			vec3{ x0, y1, 0 }, // bottom left
+			vec3{ x1, y1, 0 }, // bottom right
+		}
 
-        glyph_uv := [4]vec3{
-            vec3{ uv.x, uv.y, 0 }, // top left
-            vec3{ uv.z, uv.y, 0 }, // top right
-            vec3{ uv.x, uv.w, 0 }, // bottom left
-            vec3{ uv.z, uv.w, 0 }, // bottom right
-        }
+		glyph_uv := [4]vec3{
+			vec3{ uv.x, uv.y, 0 }, // top left
+			vec3{ uv.z, uv.y, 0 }, // top right
+			vec3{ uv.x, uv.w, 0 }, // bottom left
+			vec3{ uv.z, uv.w, 0 }, // bottom right
+		}
 
-        for i in 0 ..< len(rect_indices_data) {
-            indices_data[idx_offset + u32(i)] = rect_indices_data[i] + next_rect_idx
-        }
+		for i in 0 ..< len(rect_indices_data) {
+			indices_data[idx_offset + u32(i)] = rect_indices_data[i] + next_rect_idx
+		}
 
-        offset := 0
-        for i in 0 ..< len(glyph_vertices) {
-            for w in 0 ..< 3 {
-                vertices_data[vertex_index + offset + w] = glyph_vertices[i][w]
-                vertices_data[vertex_index + offset + w + 3] = glyph_uv[i][w]
-            }
+		offset := 0
+		for i in 0 ..< len(glyph_vertices) {
+			for w in 0 ..< 3 {
+				vertices_data[vertex_index + offset + w] = glyph_vertices[i][w]
+				vertices_data[vertex_index + offset + w + 3] = glyph_uv[i][w]
+			}
 
-            // stride, 2 vec3
-            offset += 6
-        }
+			// stride, 2 vec3
+			offset += 6
+		}
 
-        x += atlas.glyphs[ch - begin_idx].advance.x
+		x += atlas.glyphs[ch - begin_idx].advance.x
 
-        if idx < len(text) - 1 {
-            next_char, _ := utf8.decode_rune_in_string(text[idx + 1:])
+		if idx < len(text) - 1 {
+			next_char, _ := utf8.decode_rune_in_string(text[idx + 1:])
 
-            kern := tt.GetCodepointKernAdvance(atlas.font_info, ch, next_char)
-            x += math.round(f32(kern) * atlas.scale) / atlas.size.x
-        }
+			kern := tt.GetCodepointKernAdvance(atlas.font_info, ch, next_char)
+			x += math.round(f32(kern) * atlas.scale) / atlas.size.x
+		}
 
-        vertex_index += 2 * size_of(vec3)
-        idx_offset += len(rect_indices_data)
-        next_rect_idx += 4 // 4 sides
-    }
+		vertex_index += 2 * size_of(vec3)
+		idx_offset += len(rect_indices_data)
+		next_rect_idx += 4 // 4 sides
+	}
 
-    gui := get_gui(id, loc=loc)
+	gui := get_gui(id, loc=loc)
 
-    gui.vertex_buffer_size = u64(size_of(f32) * len(vertices_data))
-    gui.index_buffer_size = u64(size_of(u32) * len(indices_data))
-    gui.index_count = u32(len(indices_data))
+	gui.vertex_buffer_size = u64(size_of(f32) * len(vertices_data))
+	gui.index_buffer_size = u64(size_of(u32) * len(indices_data))
+	gui.index_count = u32(len(indices_data))
 
-    if gui.vertex_buffer != nil {
-        wgpu.BufferDestroy(gui.vertex_buffer)
-        wgpu.BufferRelease(gui.vertex_buffer)
+	if gui.vertex_buffer != nil {
+		wgpu.BufferDestroy(gui.vertex_buffer)
+		wgpu.BufferRelease(gui.vertex_buffer)
 
-        wgpu.BufferDestroy(gui.index_buffer)
-        wgpu.BufferRelease(gui.index_buffer)
-    }
+		wgpu.BufferDestroy(gui.index_buffer)
+		wgpu.BufferRelease(gui.index_buffer)
+	}
 
-    label := strings.concatenate({ "text: (", to_string(id), ") vertex buffer" }, context.temp_allocator)
+	label := strings.concatenate({ "text: (", to_string(id), ") vertex buffer" }, context.temp_allocator)
 
-    gui.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, gui.vertex_buffer_size, label=label)
-    wgpu.QueueWriteBuffer(device.queue, gui.vertex_buffer, 0, &vertices_data[0], uint(gui.vertex_buffer_size))
+	gui.vertex_buffer = device_create_buffer({ .CopyDst, .Vertex }, gui.vertex_buffer_size, label=label)
+	wgpu.QueueWriteBuffer(device.queue, gui.vertex_buffer, 0, &vertices_data[0], uint(gui.vertex_buffer_size))
 
-    label = strings.concatenate({ "text: (", to_string(id), ") index buffer" }, context.temp_allocator)
+	label = strings.concatenate({ "text: (", to_string(id), ") index buffer" }, context.temp_allocator)
 
-    gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
-    wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &indices_data[0], uint(gui.index_buffer_size))
+	gui.index_buffer = device_create_buffer({ .CopyDst, .Index }, gui.index_buffer_size, label=label)
+	wgpu.QueueWriteBuffer(device.queue, gui.index_buffer, 0, &indices_data[0], uint(gui.index_buffer_size))
 }
 
 new_font_atlas :: proc(filepath: string, padding: u32, font_size: f32, loc:=#caller_location) -> ^GameObject {
-    obj := new_empty()
-    atlas := new_font_component(obj.id, loc=loc)
+	obj := new_empty()
+	atlas := new_font_component(obj.id, loc=loc)
 
-    atlas.font_size = font_size
-    atlas.filepath = filepath
-    atlas.padding = padding
+	atlas.font_size = font_size
+	atlas.filepath = filepath
+	atlas.padding = padding
 
-    font_data := read_file_to_u8(filepath)
+	font_data := read_file_to_u8(filepath)
 
-    if font_data == nil {
-        ERROR("Failed to read font file.", loc=loc)
-        return obj
-    }
+	if font_data == nil {
+		ERROR("Failed to read font file.", loc=loc)
+		return obj
+	}
 
-    // stb_truetype stores a pointer to this buffer and reads from it for the
-    // lifetime of the font, so it must be kept alive until destroy_fonts.
-    atlas.font_data = font_data
+	// stb_truetype stores a pointer to this buffer and reads from it for the
+	// lifetime of the font, so it must be kept alive until destroy_fonts.
+	atlas.font_data = font_data
 
-    begin_idx := ' '
-    end_idx := '~' + 1
+	begin_idx := ' '
+	end_idx := '~' + 1
 
-    // HACK: calculate this shit
-    atlas.begin_idx = u32(begin_idx)
-    atlas.end_idx = u32(end_idx)
+	// HACK: calculate this shit
+	atlas.begin_idx = u32(begin_idx)
+	atlas.end_idx = u32(end_idx)
 
-    atlas.size.x = 1024
-    atlas.size.y = 1024
+	atlas.size.x = 1024
+	atlas.size.y = 1024
 
-    atlas.data = make([^]byte, int(atlas.size.x * atlas.size.y), allocator=context.allocator)
-    // HACK: this should be a map because languages like japanese, chinese has an index too big to do in this way
-    atlas.glyphs = make([]FontGlyph, int(end_idx - begin_idx), allocator=context.allocator)
+	atlas.data = make([^]byte, int(atlas.size.x * atlas.size.y), allocator=context.allocator)
+	// HACK: this should be a map because languages like japanese, chinese has an index too big to do in this way
+	atlas.glyphs = make([]FontGlyph, int(end_idx - begin_idx), allocator=context.allocator)
 
-    //----------------------------------------------------------------------------
-    atlas.font_info = new(tt.fontinfo, allocator=context.allocator)
-    if !tt.InitFont(atlas.font_info, &font_data[0], 0) {
-        ERRORF("Failed to initialize the font: %v", filepath)
-        return obj
-    }
+	//----------------------------------------------------------------------------
+	atlas.font_info = new(tt.fontinfo, allocator=context.allocator)
+	if !tt.InitFont(atlas.font_info, &font_data[0], 0) {
+		ERRORF("Failed to initialize the font: %v", filepath)
+		return obj
+	}
 
-    scale := tt.ScaleForPixelHeight(atlas.font_info, atlas.font_size)
-    atlas.scale = scale
+	scale := tt.ScaleForPixelHeight(atlas.font_info, atlas.font_size)
+	atlas.scale = scale
 
-    ascent, descent, line_gap: i32
-    tt.GetFontVMetrics(atlas.font_info, &ascent, &descent, &line_gap)
-    descent = i32(f32(descent) * scale)
-    ascent = i32(f32(ascent) * scale)
+	ascent, descent, line_gap: i32
+	tt.GetFontVMetrics(atlas.font_info, &ascent, &descent, &line_gap)
+	descent = i32(f32(descent) * scale)
+	ascent = i32(f32(ascent) * scale)
 
-    padding: i32 = 2
-    col, row: i32 = padding, padding
-    glyph_max_height: i32
+	padding: i32 = 2
+	col, row: i32 = padding, padding
+	glyph_max_height: i32
 
-    for c in begin_idx ..< end_idx {
-        glyph := &atlas.glyphs[u32(c) - atlas.begin_idx]
+	for c in begin_idx ..< end_idx {
+		glyph := &atlas.glyphs[u32(c) - atlas.begin_idx]
 
-        advance, lsb: i32
-        tt.GetCodepointHMetrics(atlas.font_info, c, &advance, &lsb)
+		advance, lsb: i32
+		tt.GetCodepointHMetrics(atlas.font_info, c, &advance, &lsb)
 
-        advance = i32(math.round(f32(advance) * scale))
-        lsb     = i32(math.round(f32(lsb) * scale))
+		advance = i32(math.round(f32(advance) * scale))
+		lsb	 = i32(math.round(f32(lsb) * scale))
 
-        pos, size: vec2i32
-        bitmap := tt.GetCodepointBitmapSubpixel(atlas.font_info, scale, scale, 0, 0, c, &size.x, &size.y, &pos.x, &pos.y)
-        glyph.pos.x = f32(pos.x)
-        glyph.pos.y= f32(pos.y)
+		pos, size: vec2i32
+		bitmap := tt.GetCodepointBitmapSubpixel(atlas.font_info, scale, scale, 0, 0, c, &size.x, &size.y, &pos.x, &pos.y)
+		glyph.pos.x = f32(pos.x)
+		glyph.pos.y= f32(pos.y)
 
-        glyph_max_height = max(glyph_max_height, size.y)
+		glyph_max_height = max(glyph_max_height, size.y)
 
-        if size.x + col > i32(atlas.size.x) {
-            col = padding
-            row += glyph_max_height + padding
+		if size.x + col > i32(atlas.size.x) {
+			col = padding
+			row += glyph_max_height + padding
 
-            if row > i32(atlas.size.y) {
-                ERRORF("atlas size is too small for the font size, reduce the font size or increase the atlas size, atlas: %v", filepath)
-                return obj
-            }
-        }
+			if row > i32(atlas.size.y) {
+				ERRORF("atlas size is too small for the font size, reduce the font size or increase the atlas size, atlas: %v", filepath)
+				return obj
+			}
+		}
 
-        for y in 0 ..< size.y {
-            for x in 0 ..< size.x {
-                atlas.data[(row + y) * i32(atlas.size.x) + col + x] = bitmap[y * size.x + x]
-            }
-        }
+		for y in 0 ..< size.y {
+			for x in 0 ..< size.x {
+				atlas.data[(row + y) * i32(atlas.size.x) + col + x] = bitmap[y * size.x + x]
+			}
+		}
 
-        glyph.advance = vec2{ f32(advance - lsb) / atlas.size.x, f32(ascent + descent + line_gap + 4) / atlas.size.y }
-        glyph.size = vec2{ f32(size.x), f32(size.y) }
+		glyph.advance = vec2{ f32(advance - lsb) / atlas.size.x, f32(ascent + descent + line_gap + 4) / atlas.size.y }
+		glyph.size = vec2{ f32(size.x), f32(size.y) }
 
-        p := vec2{ f32(col) / atlas.size.x, f32(row) / atlas.size.x }
-        s := vec2{ f32(size.x) / atlas.size.x, f32(size.y) / atlas.size.y }
+		p := vec2{ f32(col) / atlas.size.x, f32(row) / atlas.size.x }
+		s := vec2{ f32(size.x) / atlas.size.x, f32(size.y) / atlas.size.y }
 
-        glyph.uv = vec4{
-            p.x,
-            p.y,
-            p.x + s.x,
-            p.y + s.y,
-        }
+		glyph.uv = vec4{
+			p.x,
+			p.y,
+			p.x + s.x,
+			p.y + s.y,
+		}
 
-        col += size.x + padding
-        tt.FreeBitmap(bitmap, nil)
-    }
+		col += size.x + padding
+		tt.FreeBitmap(bitmap, nil)
+	}
 
-    // to visualize the atlas
-    //image.write_jpg("test_atlas.jpg", i32(atlas.size.x), i32(atlas.size.y), 1, &atlas.data[0], 100)
+	// to visualize the atlas
+	//image.write_jpg("test_atlas.jpg", i32(atlas.size.x), i32(atlas.size.y), 1, &atlas.data[0], 100)
 
-    texture := new_texture(obj.id, loc=loc)
-    texture.width = u32(atlas.size.x)
-    texture.height = u32(atlas.size.y)
-    texture.usage = { .TextureBinding, .CopyDst }
+	texture := new_texture(obj.id, loc=loc)
+	texture.width = u32(atlas.size.x)
+	texture.height = u32(atlas.size.y)
+	texture.usage = { .TextureBinding, .CopyDst }
 
-    create_texture(obj.id, .R8Unorm, atlas.data)
+	create_texture(obj.id, .R8Unorm, atlas.data)
 
-    return obj
+	return obj
 }
